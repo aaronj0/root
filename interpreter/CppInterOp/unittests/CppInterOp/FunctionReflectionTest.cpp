@@ -938,6 +938,7 @@ TEST(FunctionReflectionTest, GetFunctionCallWrapper) {
   FCI_Ctor.Invoke((void*)&object);
   output = testing::internal::GetCapturedStdout();
   EXPECT_EQ(output, "Default Ctor Called\n");
+  printf("(1)Hello World!\n");
   EXPECT_TRUE(object != nullptr);
 
   auto *DtorD = (clang::CXXDestructorDecl*)Cpp::GetDestructor(ClassC);
