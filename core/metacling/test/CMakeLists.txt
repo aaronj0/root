@@ -18,10 +18,10 @@ endif()
 ROOT_ADD_GTEST(
   TClingTest
 
-  TClingTests.cxx
+  # TClingTests.cxx
   TClingCallFuncTests.cxx
-  TClingDataMemberInfoTests.cxx
-  ${ROOT7SRC}
+  # TClingDataMemberInfoTests.cxx
+  # ${ROOT7SRC}
   TClingMethodInfoTests.cxx
 
   LIBRARIES

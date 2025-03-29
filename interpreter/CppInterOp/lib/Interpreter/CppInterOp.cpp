@@ -2235,7 +2235,7 @@ namespace Cpp {
             // Note: This might be ok, the body might be defined
             //       in a library, and all we have seen is the
             //       header file.
-            // llvm::errs() << "TClingCallFunc::make_wrapper" << ":" <<
+            // llvm::errs() << "InterOp::JitCall::make_wrapper" << ":" <<
             //      "Cannot make wrapper for a function which is "
             //      "declared but not defined!";
             // return 0;
@@ -2243,7 +2243,7 @@ namespace Cpp {
           case FunctionDecl::TK_FunctionTemplate: {
             // This decl is actually a function template,
             // not a function at all.
-            llvm::errs() << "TClingCallFunc::make_wrapper"
+            llvm::errs() << "InterOp::JitCall::make_wrapper"
                          << ":"
                          << "Cannot make wrapper for a function template!";
             return 0;
@@ -2261,7 +2261,7 @@ namespace Cpp {
               // Note: This might be ok, the body might be defined
               //       in a library, and all we have seen is the
               //       header file.
-              // llvm::errs() << "TClingCallFunc::make_wrapper" << ":" <<
+              // llvm::errs() << "InterOp::JitCall::make_wrapper" << ":" <<
               //      "Cannot make wrapper for a function template "
               //      "explicit specialization which is declared "
               //      "but not defined!";
@@ -2270,7 +2270,7 @@ namespace Cpp {
             }
             const FunctionDecl* Pattern = FD->getTemplateInstantiationPattern();
             if (!Pattern) {
-              llvm::errs() << "TClingCallFunc::make_wrapper"
+              llvm::errs() << "InterOp::JitCall::make_wrapper"
                            << ":"
                            << "Cannot make wrapper for a member function "
                               "instantiation with no pattern!";
@@ -2292,7 +2292,7 @@ namespace Cpp {
               //       header file.
               break;
             } else if (!Pattern->hasBody()) {
-              llvm::errs() << "TClingCallFunc::make_wrapper"
+              llvm::errs() << "InterOp::JitCall::make_wrapper"
                            << ":"
                            << "Cannot make wrapper for a member function "
                               "instantiation with no body!";
@@ -2313,7 +2313,7 @@ namespace Cpp {
               // Note: This might be ok, the body might be defined
               //       in a library, and all we have seen is the
               //       header file.
-              // llvm::errs() << "TClingCallFunc::make_wrapper" << ":" <<
+              // llvm::errs() << "InterOp::JitCall::make_wrapper" << ":" <<
               //      "Cannot make wrapper for a function template "
               //      "explicit specialization which is declared "
               //      "but not defined!";
@@ -2322,7 +2322,7 @@ namespace Cpp {
             }
             const FunctionDecl* Pattern = FD->getTemplateInstantiationPattern();
             if (!Pattern) {
-              llvm::errs() << "TClingCallFunc::make_wrapper"
+              llvm::errs() << "InterOp::JitCall::make_wrapper"
                            << ":"
                            << "Cannot make wrapper for a function template"
                               "instantiation with no pattern!";
@@ -2345,7 +2345,7 @@ namespace Cpp {
               break;
             }
             if (!Pattern->hasBody()) {
-              llvm::errs() << "TClingCallFunc::make_wrapper"
+              llvm::errs() << "InterOp::JitCall::make_wrapper"
                            << ":"
                            << "Cannot make wrapper for a function template"
                               "instantiation with no body!";
@@ -2369,7 +2369,7 @@ namespace Cpp {
               // Note: This might be ok, the body might be defined
               //       in a library, and all we have seen is the
               //       header file.
-              // llvm::errs() << "TClingCallFunc::make_wrapper" << ":" <<
+              // llvm::errs() << "InterOp::JitCall::make_wrapper" << ":" <<
               //      "Cannot make wrapper for a dependent function "
               //      "template explicit specialization which is declared "
               //      "but not defined!";
@@ -2379,7 +2379,7 @@ namespace Cpp {
             const FunctionDecl* Pattern = FD->getTemplateInstantiationPattern();
             if (!Pattern) {
               llvm::errs()
-                  << "TClingCallFunc::make_wrapper"
+                  << "InterOp::JitCall::make_wrapper"
                   << ":"
                   << "Cannot make wrapper for a dependent function template"
                      "instantiation with no pattern!";
@@ -2403,7 +2403,7 @@ namespace Cpp {
             }
             if (!Pattern->hasBody()) {
               llvm::errs()
-                  << "TClingCallFunc::make_wrapper"
+                  << "InterOp::JitCall::make_wrapper"
                   << ":"
                   << "Cannot make wrapper for a dependent function template"
                      "instantiation with no body!";
@@ -2416,7 +2416,7 @@ namespace Cpp {
           default: {
             // Will only happen if clang implementation changes.
             // Protect ourselves in case that happens.
-            llvm::errs() << "TClingCallFunc::make_wrapper" << ":" <<
+            llvm::errs() << "InterOp::JitCall::make_wrapper" << ":" <<
                            "Unhandled template kind!";
             return 0;
           } break;
@@ -2450,7 +2450,7 @@ namespace Cpp {
                                         /*Recursive=*/true,
                                         /*DefinitionRequired=*/true);
         if (!FD->isDefined(Definition)) {
-          llvm::errs() << "TClingCallFunc::make_wrapper"
+          llvm::errs() << "InterOp::JitCall::make_wrapper"
                        << ":"
                        << "Failed to force template instantiation!";
           return 0;
@@ -2462,12 +2462,12 @@ namespace Cpp {
           case FunctionDecl::TK_NonTemplate: {
             // Ordinary function, not a template specialization.
             if (Definition->isDeleted()) {
-              llvm::errs() << "TClingCallFunc::make_wrapper"
+              llvm::errs() << "InterOp::JitCall::make_wrapper"
                            << ":"
                            << "Cannot make wrapper for a deleted function!";
               return 0;
             } else if (Definition->isLateTemplateParsed()) {
-              llvm::errs() << "TClingCallFunc::make_wrapper"
+              llvm::errs() << "InterOp::JitCall::make_wrapper"
                            << ":"
                            << "Cannot make wrapper for a late template parsed "
                               "function!";
@@ -2483,7 +2483,7 @@ namespace Cpp {
           case FunctionDecl::TK_FunctionTemplate: {
             // This decl is actually a function template,
             // not a function at all.
-            llvm::errs() << "TClingCallFunc::make_wrapper"
+            llvm::errs() << "InterOp::JitCall::make_wrapper"
                          << ":"
                          << "Cannot make wrapper for a function template!";
             return 0;
@@ -2494,13 +2494,13 @@ namespace Cpp {
             // of a class template.
             if (Definition->isDeleted()) {
               llvm::errs()
-                  << "TClingCallFunc::make_wrapper"
+                  << "InterOp::JitCall::make_wrapper"
                   << ":"
                   << "Cannot make wrapper for a deleted member function "
                      "of a specialization!";
               return 0;
             } else if (Definition->isLateTemplateParsed()) {
-              llvm::errs() << "TClingCallFunc::make_wrapper"
+              llvm::errs() << "InterOp::JitCall::make_wrapper"
                            << ":"
                            << "Cannot make wrapper for a late template parsed "
                               "member function of a specialization!";
@@ -2519,13 +2519,13 @@ namespace Cpp {
             // function template.  Could be a namespace scope function or a
             // member function.
             if (Definition->isDeleted()) {
-              llvm::errs() << "TClingCallFunc::make_wrapper"
+              llvm::errs() << "InterOp::JitCall::make_wrapper"
                            << ":"
                            << "Cannot make wrapper for a deleted function "
                               "template specialization!";
               return 0;
             } else if (Definition->isLateTemplateParsed()) {
-              llvm::errs() << "TClingCallFunc::make_wrapper"
+              llvm::errs() << "InterOp::JitCall::make_wrapper"
                            << ":"
                            << "Cannot make wrapper for a late template parsed "
                               "function template specialization!";
@@ -2548,13 +2548,13 @@ namespace Cpp {
             // dependent on a template argument.
             if (Definition->isDeleted()) {
               llvm::errs()
-                  << "TClingCallFunc::make_wrapper"
+                  << "InterOp::JitCall::make_wrapper"
                   << ":"
                   << "Cannot make wrapper for a deleted dependent function "
                      "template specialization!";
               return 0;
             } else if (Definition->isLateTemplateParsed()) {
-              llvm::errs() << "TClingCallFunc::make_wrapper"
+              llvm::errs() << "InterOp::JitCall::make_wrapper"
                            << ":"
                            << "Cannot make wrapper for a late template parsed "
                               "dependent function template specialization!";
@@ -2570,7 +2570,7 @@ namespace Cpp {
           default: {
             // Will only happen if clang implementation changes.
             // Protect ourselves in case that happens.
-            llvm::errs() << "TClingCallFunc::make_wrapper"
+            llvm::errs() << "InterOp::JitCall::make_wrapper"
                          << ":"
                          << "Unhandled template kind!";
             return 0;
@@ -2657,7 +2657,7 @@ namespace Cpp {
       if (wrapper) {
         gWrapperStore.insert(std::make_pair(FD, wrapper));
       } else {
-        llvm::errs() << "TClingCallFunc::make_wrapper"
+        llvm::errs() << "InterOp::JitCall::make_wrapper"
                      << ":"
                      << "Failed to compile\n"
                      << "==== SOURCE BEGIN ====\n"

@@ -113,7 +113,7 @@ namespace Cpp {
     // this class.
     using GenericCall = void (*)(void*, int, void**, void*);
     using DestructorCall = void (*)(void*, unsigned long, int);
-  private:
+
     union {
       GenericCall m_GenericCall;
       DestructorCall m_DestructorCall;

@@ -1015,29 +1015,40 @@ tcling_callfunc_Wrapper_t TClingCallFunc::make_wrapper()
 
    // Forward to JitCall's version of make_wrapper
    const Decl *D = GetFunctionOrShadowDecl();
+// fJitCall.reset(new Cpp::JitCall(Cpp::MakeFunctionCallable(Decls[0])));
 
-   auto I = gWrapperStore.find(D);
-   if (I != gWrapperStore.end())
-      return (tcling_callfunc_Wrapper_t)I->second;
+   fJitCall = std::make_unique<Cpp::JitCall>(Cpp::MakeFunctionCallable(D));
+   
+   // auto I = gWrapperStore.find(D);
+   // if (I != gWrapperStore.end())
+   //    return (tcling_callfunc_Wrapper_t)I->second;
 
-   string wrapper_name;
-   string wrapper;
+   // string wrapper_name;
+   // string wrapper;
 
-   if (get_wrapper_code(wrapper_name, wrapper) == 0) return nullptr;
+   // if (get_wrapper_code(wrapper_name, wrapper) == 0) return nullptr;
 
-   //fprintf(stderr, "%s\n", wrapper.c_str());
-   //
-   //  Compile the wrapper code.
-   //
-   void *F = compile_wrapper(wrapper_name, wrapper);
-   if (F) {
-      gWrapperStore.insert(make_pair(D, F));
-   } else {
-      ::Error("TClingCallFunc::make_wrapper",
-            "Failed to compile\n  ==== SOURCE BEGIN ====\n%s\n  ==== SOURCE END ====",
-            wrapper.c_str());
-   }
-   return (tcling_callfunc_Wrapper_t)F;
+   if(fJitCall->getKind() == Cpp::JitCall::kUnknown) return nullptr;
+   // //fprintf(stderr, "%s\n", wrapper.c_str());
+   // //
+   // //  Compile the wrapper code.
+   // //
+   // void *F = compile_wrapper(wrapper_name, wrapper);
+   // if (F) {
+   //    gWrapperStore.insert(make_pair(D, F));
+   // } else {
+   //    ::Error("TClingCallFunc::make_wrapper",
+   //          "Failed to compile\n  ==== SOURCE BEGIN ====\n%s\n  ==== SOURCE END ====",
+   //          wrapper.c_str());
+   // }
+   // return (tcling_callfunc_Wrapper_t)F;
+
+   if(fJitCall->getKind() == Cpp::JitCall::kGenericCall)
+      return fJitCall->m_GenericCall;
+   // else if(fJitCall->getKind() == Cpp::JitCall::kDestructorCall)
+   //    return fJitCall->m_DestructorCall;
+   return nullptr;
+   
 }
 
 static std::string PrepareStructorWrapper(const Decl *D, const char *wrapper_prefix, std::string &class_name)
@@ -1143,118 +1154,126 @@ tcling_callfunc_ctor_Wrapper_t TClingCallFunc::make_ctor_wrapper(const TClingCla
    R__LOCKGUARD_CLING(gInterpreterMutex);
 
    auto D = info->GetDecl();
-   auto I = gCtorWrapperStore.find(D);
-   if (I != gCtorWrapperStore.end())
-      return (tcling_callfunc_ctor_Wrapper_t)I->second;
+   fJitCall = std::make_unique<Cpp::JitCall>(Cpp::MakeFunctionCallable(D));
 
-   //
-   //  Make the wrapper name.
-   //
-   string class_name;
-   string wrapper_name = PrepareStructorWrapper(D, "__ctor", class_name);
+   
+   if(fJitCall->getKind() == Cpp::JitCall::kGenericCall)
+         return reinterpret_cast<tcling_callfunc_ctor_Wrapper_t>(fJitCall->m_GenericCall);
 
-   string constr_arg;
-   if (kind == ROOT::TMetaUtils::EIOCtorCategory::kIOPtrType)
-      constr_arg = string("((") + type_name + "*)nullptr)";
-   else if (kind == ROOT::TMetaUtils::EIOCtorCategory::kIORefType)
-      constr_arg = string("(*((") + type_name + "*)arena))";
+   return nullptr;
 
-   //
-   //  Write the wrapper code.
-   //
-   int indent_level = 0;
-   ostringstream buf;
-   buf << "__attribute__((used)) ";
-   buf << "extern \"C\" void ";
-   buf << wrapper_name;
-   buf << "(void** ret, void* arena, unsigned long nary)\n";
-   buf << "{\n";
+   // auto I = gCtorWrapperStore.find(D);
+   // if (I != gCtorWrapperStore.end())
+   //    return (tcling_callfunc_ctor_Wrapper_t)I->second;
 
-   //    if (!arena) {
-   //       if (!nary) {
-   //          *ret = new ClassName;
-   //       }
-   //       else {
-   //          *ret = new ClassName[nary];
-   //       }
-   //    }
-   indent(buf, ++indent_level);
-   buf << "if (!arena) {\n";
-   indent(buf, ++indent_level);
-   buf << "if (!nary) {\n";
-   indent(buf, ++indent_level);
-   buf << "*ret = new " << class_name << constr_arg << ";\n";
-   indent(buf, --indent_level);
-   buf << "}\n";
-   indent(buf, indent_level);
-   buf << "else {\n";
-   indent(buf, ++indent_level);
-   if (constr_arg.empty()) {
-      buf << "*ret = new " << class_name << "[nary];\n";
-   } else {
-      buf << "char *buf = (char *) malloc(nary * sizeof(" << class_name << "));\n";
-      indent(buf, indent_level);
-      buf << "for (int k=0;k<nary;++k)\n";
-      indent(buf, ++indent_level);
-      buf << "new (buf + k * sizeof(" << class_name << ")) " << class_name << constr_arg << ";\n";
-      indent(buf, --indent_level);
-      buf << "*ret = buf;\n";
-   }
-   indent(buf, --indent_level);
-   buf << "}\n";
-   indent(buf, --indent_level);
-   buf << "}\n";
-   //    else {
-   //       if (!nary) {
-   //          *ret = new (arena) ClassName;
-   //       }
-   //       else {
-   //          *ret = new (arena) ClassName[nary];
-   //       }
-   //    }
-   indent(buf, indent_level);
-   buf << "else {\n";
-   indent(buf, ++indent_level);
-   buf << "if (!nary) {\n";
-   indent(buf, ++indent_level);
-   buf << "*ret = new (arena) " << class_name << constr_arg << ";\n";
-   indent(buf, --indent_level);
-   buf << "}\n";
-   indent(buf, indent_level);
-   buf << "else {\n";
-   indent(buf, ++indent_level);
-   if (constr_arg.empty()) {
-      buf << "*ret = new (arena) " << class_name << "[nary];\n";
-   } else {
-      buf << "for (int k=0;k<nary;++k)\n";
-      indent(buf, ++indent_level);
-      buf << "new ((char *) arena + k * sizeof(" << class_name << ")) " << class_name << constr_arg << ";\n";
-      indent(buf, --indent_level);
-      buf << "*ret = arena;\n";
-   }
-   indent(buf, --indent_level);
-   buf << "}\n";
-   indent(buf, --indent_level);
-   buf << "}\n";
-   // End wrapper.
-   --indent_level;
-   buf << "}\n";
-   // Done.
-   string wrapper(buf.str());
-   //fprintf(stderr, "%s\n", wrapper.c_str());
-   //
-   //  Compile the wrapper code.
-   //
-   void *F = compile_wrapper(wrapper_name, wrapper,
-                             /*withAccessControl=*/false);
-   if (F) {
-      gCtorWrapperStore.insert(make_pair(D, F));
-   } else {
-      ::Error("TClingCallFunc::make_ctor_wrapper",
-            "Failed to compile\n  ==== SOURCE BEGIN ====\n%s\n  ==== SOURCE END ====",
-            wrapper.c_str());
-   }
-   return (tcling_callfunc_ctor_Wrapper_t)F;
+   // //
+   // //  Make the wrapper name.
+   // //
+   // string class_name;
+   // string wrapper_name = PrepareStructorWrapper(D, "__ctor", class_name);
+
+   // string constr_arg;
+   // if (kind == ROOT::TMetaUtils::EIOCtorCategory::kIOPtrType)
+   //    constr_arg = string("((") + type_name + "*)nullptr)";
+   // else if (kind == ROOT::TMetaUtils::EIOCtorCategory::kIORefType)
+   //    constr_arg = string("(*((") + type_name + "*)arena))";
+
+   // //
+   // //  Write the wrapper code.
+   // //
+   // int indent_level = 0;
+   // ostringstream buf;
+   // buf << "__attribute__((used)) ";
+   // buf << "extern \"C\" void ";
+   // buf << wrapper_name;
+   // buf << "(void** ret, void* arena, unsigned long nary)\n";
+   // buf << "{\n";
+
+   // //    if (!arena) {
+   // //       if (!nary) {
+   // //          *ret = new ClassName;
+   // //       }
+   // //       else {
+   // //          *ret = new ClassName[nary];
+   // //       }
+   // //    }
+   // indent(buf, ++indent_level);
+   // buf << "if (!arena) {\n";
+   // indent(buf, ++indent_level);
+   // buf << "if (!nary) {\n";
+   // indent(buf, ++indent_level);
+   // buf << "*ret = new " << class_name << constr_arg << ";\n";
+   // indent(buf, --indent_level);
+   // buf << "}\n";
+   // indent(buf, indent_level);
+   // buf << "else {\n";
+   // indent(buf, ++indent_level);
+   // if (constr_arg.empty()) {
+   //    buf << "*ret = new " << class_name << "[nary];\n";
+   // } else {
+   //    buf << "char *buf = (char *) malloc(nary * sizeof(" << class_name << "));\n";
+   //    indent(buf, indent_level);
+   //    buf << "for (int k=0;k<nary;++k)\n";
+   //    indent(buf, ++indent_level);
+   //    buf << "new (buf + k * sizeof(" << class_name << ")) " << class_name << constr_arg << ";\n";
+   //    indent(buf, --indent_level);
+   //    buf << "*ret = buf;\n";
+   // }
+   // indent(buf, --indent_level);
+   // buf << "}\n";
+   // indent(buf, --indent_level);
+   // buf << "}\n";
+   // //    else {
+   // //       if (!nary) {
+   // //          *ret = new (arena) ClassName;
+   // //       }
+   // //       else {
+   // //          *ret = new (arena) ClassName[nary];
+   // //       }
+   // //    }
+   // indent(buf, indent_level);
+   // buf << "else {\n";
+   // indent(buf, ++indent_level);
+   // buf << "if (!nary) {\n";
+   // indent(buf, ++indent_level);
+   // buf << "*ret = new (arena) " << class_name << constr_arg << ";\n";
+   // indent(buf, --indent_level);
+   // buf << "}\n";
+   // indent(buf, indent_level);
+   // buf << "else {\n";
+   // indent(buf, ++indent_level);
+   // if (constr_arg.empty()) {
+   //    buf << "*ret = new (arena) " << class_name << "[nary];\n";
+   // } else {
+   //    buf << "for (int k=0;k<nary;++k)\n";
+   //    indent(buf, ++indent_level);
+   //    buf << "new ((char *) arena + k * sizeof(" << class_name << ")) " << class_name << constr_arg << ";\n";
+   //    indent(buf, --indent_level);
+   //    buf << "*ret = arena;\n";
+   // }
+   // indent(buf, --indent_level);
+   // buf << "}\n";
+   // indent(buf, --indent_level);
+   // buf << "}\n";
+   // // End wrapper.
+   // --indent_level;
+   // buf << "}\n";
+   // // Done.
+   // string wrapper(buf.str());
+   // //fprintf(stderr, "%s\n", wrapper.c_str());
+   // //
+   // //  Compile the wrapper code.
+   // //
+   // void *F = compile_wrapper(wrapper_name, wrapper,
+   //                           /*withAccessControl=*/false);
+   // if (F) {
+   //    gCtorWrapperStore.insert(make_pair(D, F));
+   // } else {
+   //    ::Error("TClingCallFunc::make_ctor_wrapper",
+   //          "Failed to compile\n  ==== SOURCE BEGIN ====\n%s\n  ==== SOURCE END ====",
+   //          wrapper.c_str());
+   // }
+   // return (tcling_callfunc_ctor_Wrapper_t)F;
 }
 
 tcling_callfunc_dtor_Wrapper_t
@@ -1293,116 +1312,124 @@ TClingCallFunc::make_dtor_wrapper(const TClingClassInfo *info)
    R__LOCKGUARD_CLING(gInterpreterMutex);
 
    const Decl *D = info->GetDecl();
-   auto I = gDtorWrapperStore.find(D);
-   if (I != gDtorWrapperStore.end())
-      return (tcling_callfunc_dtor_Wrapper_t)I->second;
+   fJitCall = std::make_unique<Cpp::JitCall>(Cpp::MakeFunctionCallable(D));
+   
+   if(fJitCall->getKind() == Cpp::JitCall::kUnknown) return nullptr;
 
-   //
-   //  Make the wrapper name.
-   //
-   std::string class_name;
-   string wrapper_name = PrepareStructorWrapper(D, "__dtor", class_name);
-   //
-   //  Write the wrapper code.
-   //
-   int indent_level = 0;
-   ostringstream buf;
-   buf << "__attribute__((used)) ";
-   buf << "extern \"C\" void ";
-   buf << wrapper_name;
-   buf << "(void* obj, unsigned long nary, int withFree)\n";
-   buf << "{\n";
-   //    if (withFree) {
-   //       if (!nary) {
-   //          delete (ClassName*) obj;
-   //       }
-   //       else {
-   //          delete[] (ClassName*) obj;
-   //       }
-   //    }
-   ++indent_level;
-   indent(buf, indent_level);
-   buf << "if (withFree) {\n";
-   ++indent_level;
-   indent(buf, indent_level);
-   buf << "if (!nary) {\n";
-   ++indent_level;
-   indent(buf, indent_level);
-   buf << "delete (" << class_name << "*) obj;\n";
-   --indent_level;
-   indent(buf, indent_level);
-   buf << "}\n";
-   indent(buf, indent_level);
-   buf << "else {\n";
-   ++indent_level;
-   indent(buf, indent_level);
-   buf << "delete[] (" << class_name << "*) obj;\n";
-   --indent_level;
-   indent(buf, indent_level);
-   buf << "}\n";
-   --indent_level;
-   indent(buf, indent_level);
-   buf << "}\n";
-   //    else {
-   //       typedef ClassName Nm;
-   //       if (!nary) {
-   //          ((Nm*)obj)->~Nm();
-   //       }
-   //       else {
-   //          for (unsigned long i = nary - 1; i > -1; --i) {
-   //             (((Nm*)obj)+i)->~Nm();
-   //          }
-   //       }
-   //    }
-   indent(buf, indent_level);
-   buf << "else {\n";
-   ++indent_level;
-   indent(buf, indent_level);
-   buf << "typedef " << class_name << " Nm;\n";
-   buf << "if (!nary) {\n";
-   ++indent_level;
-   indent(buf, indent_level);
-   buf << "((Nm*)obj)->~Nm();\n";
-   --indent_level;
-   indent(buf, indent_level);
-   buf << "}\n";
-   indent(buf, indent_level);
-   buf << "else {\n";
-   ++indent_level;
-   indent(buf, indent_level);
-   buf << "do {\n";
-   ++indent_level;
-   indent(buf, indent_level);
-   buf << "(((Nm*)obj)+(--nary))->~Nm();\n";
-   --indent_level;
-   indent(buf, indent_level);
-   buf << "} while (nary);\n";
-   --indent_level;
-   indent(buf, indent_level);
-   buf << "}\n";
-   --indent_level;
-   indent(buf, indent_level);
-   buf << "}\n";
-   // End wrapper.
-   --indent_level;
-   buf << "}\n";
-   // Done.
-   string wrapper(buf.str());
-   //fprintf(stderr, "%s\n", wrapper.c_str());
-   //
-   //  Compile the wrapper code.
-   //
-   void *F = compile_wrapper(wrapper_name, wrapper,
-                             /*withAccessControl=*/false);
-   if (F) {
-      gDtorWrapperStore.insert(make_pair(D, F));
-   } else {
-      ::Error("TClingCallFunc::make_dtor_wrapper",
-            "Failed to compile\n  ==== SOURCE BEGIN ====\n%s\n  ==== SOURCE END ====",
-            wrapper.c_str());
-   }
+   if(fJitCall->getKind() == Cpp::JitCall::kDestructorCall)
+       return fJitCall->m_DestructorCall;
+   return nullptr;
 
-   return (tcling_callfunc_dtor_Wrapper_t)F;
+   // auto I = gDtorWrapperStore.find(D);
+   // if (I != gDtorWrapperStore.end())
+   //    return (tcling_callfunc_dtor_Wrapper_t)I->second;
+
+   // //
+   // //  Make the wrapper name.
+   // //
+   // std::string class_name;
+   // string wrapper_name = PrepareStructorWrapper(D, "__dtor", class_name);
+   // //
+   // //  Write the wrapper code.
+   // //
+   // int indent_level = 0;
+   // ostringstream buf;
+   // buf << "__attribute__((used)) ";
+   // buf << "extern \"C\" void ";
+   // buf << wrapper_name;
+   // buf << "(void* obj, unsigned long nary, int withFree)\n";
+   // buf << "{\n";
+   // //    if (withFree) {
+   // //       if (!nary) {
+   // //          delete (ClassName*) obj;
+   // //       }
+   // //       else {
+   // //          delete[] (ClassName*) obj;
+   // //       }
+   // //    }
+   // ++indent_level;
+   // indent(buf, indent_level);
+   // buf << "if (withFree) {\n";
+   // ++indent_level;
+   // indent(buf, indent_level);
+   // buf << "if (!nary) {\n";
+   // ++indent_level;
+   // indent(buf, indent_level);
+   // buf << "delete (" << class_name << "*) obj;\n";
+   // --indent_level;
+   // indent(buf, indent_level);
+   // buf << "}\n";
+   // indent(buf, indent_level);
+   // buf << "else {\n";
+   // ++indent_level;
+   // indent(buf, indent_level);
+   // buf << "delete[] (" << class_name << "*) obj;\n";
+   // --indent_level;
+   // indent(buf, indent_level);
+   // buf << "}\n";
+   // --indent_level;
+   // indent(buf, indent_level);
+   // buf << "}\n";
+   // //    else {
+   // //       typedef ClassName Nm;
+   // //       if (!nary) {
+   // //          ((Nm*)obj)->~Nm();
+   // //       }
+   // //       else {
+   // //          for (unsigned long i = nary - 1; i > -1; --i) {
+   // //             (((Nm*)obj)+i)->~Nm();
+   // //          }
+   // //       }
+   // //    }
+   // indent(buf, indent_level);
+   // buf << "else {\n";
+   // ++indent_level;
+   // indent(buf, indent_level);
+   // buf << "typedef " << class_name << " Nm;\n";
+   // buf << "if (!nary) {\n";
+   // ++indent_level;
+   // indent(buf, indent_level);
+   // buf << "((Nm*)obj)->~Nm();\n";
+   // --indent_level;
+   // indent(buf, indent_level);
+   // buf << "}\n";
+   // indent(buf, indent_level);
+   // buf << "else {\n";
+   // ++indent_level;
+   // indent(buf, indent_level);
+   // buf << "do {\n";
+   // ++indent_level;
+   // indent(buf, indent_level);
+   // buf << "(((Nm*)obj)+(--nary))->~Nm();\n";
+   // --indent_level;
+   // indent(buf, indent_level);
+   // buf << "} while (nary);\n";
+   // --indent_level;
+   // indent(buf, indent_level);
+   // buf << "}\n";
+   // --indent_level;
+   // indent(buf, indent_level);
+   // buf << "}\n";
+   // // End wrapper.
+   // --indent_level;
+   // buf << "}\n";
+   // // Done.
+   // string wrapper(buf.str());
+   // //fprintf(stderr, "%s\n", wrapper.c_str());
+   // //
+   // //  Compile the wrapper code.
+   // //
+   // void *F = compile_wrapper(wrapper_name, wrapper,
+   //                           /*withAccessControl=*/false);
+   // if (F) {
+   //    gDtorWrapperStore.insert(make_pair(D, F));
+   // } else {
+   //    ::Error("TClingCallFunc::make_dtor_wrapper",
+   //          "Failed to compile\n  ==== SOURCE BEGIN ====\n%s\n  ==== SOURCE END ====",
+   //          wrapper.c_str());
+   // }
+
+   // return (tcling_callfunc_dtor_Wrapper_t)F;
 }
 
 void TClingCallFunc::exec(void *address, void *ret)
