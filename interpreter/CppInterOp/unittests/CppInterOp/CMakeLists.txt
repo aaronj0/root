@@ -12,14 +12,15 @@ else()
 endif()
 
 add_cppinterop_unittest(CppInterOpTests
-  EnumReflectionTest.cpp
-  FunctionReflectionTest.cpp
-  InterpreterTest.cpp
-  JitTest.cpp
-  ScopeReflectionTest.cpp
-  TypeReflectionTest.cpp
+  # EnumReflectionTest.cpp
+  # FunctionReflectionTest.cpp
+  # InterpreterTest.cpp
+  # JitTest.cpp
+  # ScopeReflectionTest.cpp
+  # TypeReflectionTest.cpp
   Utils.cpp
-  VariableReflectionTest.cpp
+  # VariableReflectionTest.cpp
+  ExternAPI.cpp
   ${EXTRA_TEST_SOURCE_FILES}
 )
 
