@@ -13,7 +13,7 @@ class TestTEMPLATES:
         import cppyy
         cls.templates = cppyy.load_reflection_info(cls.test_dct)
 
-        at_least_17 = 201402 < cppyy.gbl.gInterpreter.ProcessLine("__cplusplus;")
+        at_least_17 = 201402 < cppyy.gbl.gCling.ProcessLine("__cplusplus;")
         cls.has_integral_v    = at_least_17
         cls.has_disjunction_v = at_least_17
         cls.has_pack_fold     = at_least_17
@@ -299,7 +299,7 @@ class TestTEMPLATES:
         assert iavec[5] == 5
 
       # with variadic template
-        if cppyy.gbl.gInterpreter.ProcessLine("__cplusplus;") > 201402:
+        if cppyy.gbl.gCling.ProcessLine("__cplusplus;") > 201402:
             assert nsup.matryoshka[int, 3].type
             assert nsup.matryoshka[int, 3, 4].type
             assert nsup.make_vector[int , 3]
@@ -307,8 +307,8 @@ class TestTEMPLATES:
             assert nsup.make_vector[int , 4]().m_val == 4
 
       # with inner types using
-        if cppyy.gbl.gInterpreter.ProcessLine("__cplusplus;") > 201402:
-            assert cppyy.gbl.gInterpreter.CheckClassTemplate("using_problem::Bar::Foo")
+        if cppyy.gbl.gCling.ProcessLine("__cplusplus;") > 201402:
+            assert cppyy.gbl.gCling.CheckClassTemplate("using_problem::Bar::Foo")
             assert nsup.Foo
             assert nsup.Bar.Foo        # used to fail
 

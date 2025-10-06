@@ -49,7 +49,7 @@ def setup_mapper(initialization_fn: Callable, code_to_declare: str) -> None:
     initialization_fn()
     
     # Declare all user code in one call
-    ROOT.gInterpreter.Declare(code_to_declare)
+    ROOT.gCling.Declare(code_to_declare)
 
 
 def get_mergeable_values(starting_node: ROOT.RDF.RNode, range_id: int,
@@ -215,7 +215,7 @@ class BaseBackend(ABC):
             code_with_guard = f"#ifndef {hex}\n#define {hex}\n{stripped}\n#endif"
             cls.strings_to_declare[hex] = code_with_guard
 
-        ROOT.gInterpreter.Declare(cls.strings_to_declare[hex])
+        ROOT.gCling.Declare(cls.strings_to_declare[hex])
 
     @classmethod
     def register_shared_lib(cls, paths_to_shared_libraries):

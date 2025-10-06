@@ -21,7 +21,7 @@ def _backend_files():
 def _api_files():
     import cppyy, os
 
-    paths = str(cppyy.gbl.gInterpreter.GetIncludePath()).split('-I')
+    paths = str(cppyy.gbl.gCling.GetIncludePath()).split('-I')
     for p in paths:
         if not p: continue
 

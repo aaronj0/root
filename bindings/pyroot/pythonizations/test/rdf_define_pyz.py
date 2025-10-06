@@ -89,7 +89,7 @@ class PyDefine(unittest.TestCase):
         Define operation.
         """
 
-        ROOT.gInterpreter.Declare("""
+        ROOT.gCling.Declare("""
         struct MyFunctor
         {
             ULong64_t operator()(ULong64_t l) { return l*l; };
@@ -109,7 +109,7 @@ class PyDefine(unittest.TestCase):
         Define operation.
         """
 
-        ROOT.gInterpreter.Declare("""
+        ROOT.gCling.Declare("""
         std::function<ULong64_t(ULong64_t)> myfun = [](ULong64_t l) { return l*l; };
         """)
 
@@ -185,7 +185,7 @@ class PyDefine(unittest.TestCase):
 
         for case in test_cases:
             with self.subTest(case=case["name"]):
-                ROOT.gInterpreter.Declare(case["decl"])
+                ROOT.gCling.Declare(case["decl"])
                 rdf = ROOT.RDataFrame(5)
 
                 if "setup_columns" in case:
@@ -206,7 +206,7 @@ class PyDefine(unittest.TestCase):
         Define operation with overloads.
         """
 
-        ROOT.gInterpreter.Declare("""
+        ROOT.gCling.Declare("""
             ULong64_t my_free_function_overload(ULong64_t l) { return l; }
             ULong64_t my_free_function_overload(ULong64_t l, ULong64_t m) { return l * m; }
         """)
@@ -227,7 +227,7 @@ class PyDefine(unittest.TestCase):
         Define operation.
         """
 
-        ROOT.gInterpreter.Declare("""
+        ROOT.gCling.Declare("""
             template <typename T>
             T my_free_function_template(T l) { return l; }
         """)

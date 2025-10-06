@@ -39,10 +39,10 @@ def extend_include_path(include_path: str) -> None:
             needed for the analysis.
     """
     root_path = "-I{}".format(include_path)
-    ROOT.gInterpreter.AddIncludePath(root_path)
+    ROOT.gCling.AddIncludePath(root_path)
 
     # Retrieve ROOT internal list of include paths and add debug statement
-    root_includepath = ROOT.gInterpreter.GetIncludePath()
+    root_includepath = ROOT.gCling.GetIncludePath()
     logger.debug("ROOT include paths:\n{}".format(root_includepath))
 
 
@@ -62,7 +62,7 @@ def distribute_headers(headers_to_include: Iterable[str]) -> None:
         # Create C++ include code
         include_code = "#include \"{}\"\n".format(header)
         try:
-            ROOT.gInterpreter.Declare(include_code)
+            ROOT.gCling.Declare(include_code)
         except Exception as e:
             msg = "There was an error in including \"{}\" !".format(header)
             raise e(msg)

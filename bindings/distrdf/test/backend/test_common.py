@@ -70,7 +70,7 @@ class InitializationTest(unittest.TestCase):
         """
         def defineIntVariable(name, value):
             import ROOT
-            ROOT.gInterpreter.ProcessLine("int %s = %s;" % (name, value))
+            ROOT.gCling.ProcessLine("int %s = %s;" % (name, value))
 
         varvalue = 2
         DistRDF.initialize(defineIntVariable, "myInt", varvalue)
