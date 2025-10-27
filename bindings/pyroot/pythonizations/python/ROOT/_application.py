@@ -11,7 +11,7 @@
 import sys
 import time
 
-from cppyy.gbl import gSystem, gInterpreter, gEnv
+from cppyy.gbl import gSystem, gCling, gEnv
 
 from ROOT.libROOTPythonizations import InitApplication, InstallGUIEventInputHook
 
@@ -69,7 +69,7 @@ class PyROOTApplication(object):
             # in an interactive Python session.
             # Therefore, this function will call EndOfLineAction after each interactive
             # command (to update display etc.)
-            gInterpreter.EndOfLineAction()
+            gCling.EndOfLineAction()
             return orig_dhook(v)
 
         sys.displayhook = displayhook
