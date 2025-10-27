@@ -787,6 +787,10 @@ class TestSIGNALS:
 
 
 class TestSTDNOTINGLOBAL:
+    def setup_class(cls):
+        import cppyy
+        cls.has_byte = 201402 < cppyy.gbl.gCling.ProcessLine("__cplusplus;")
+
     @mark.xfail()
     def test01_stl_in_std(self):
         """STL classes should live in std:: only"""

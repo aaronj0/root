@@ -19,9 +19,9 @@ class PythonizationDecorator(unittest.TestCase):
     # Helpers
     def _define_class(self, class_name, namespace=None):
         if namespace is None:
-            ROOT.gInterpreter.ProcessLine('class {cn} {{ }};'.format(cn=class_name))
+            ROOT.gCling.ProcessLine('class {cn} {{ }};'.format(cn=class_name))
         else:
-            ROOT.gInterpreter.ProcessLine('''
+            ROOT.gCling.ProcessLine('''
             namespace {ns} {{
             class {cn} {{}};
             }}'''.format(ns=namespace, cn=class_name))
@@ -466,7 +466,7 @@ class PythonizationDecorator(unittest.TestCase):
         self._define_class(class_name)
         self._define_class(class_name, ns)
         class_template = 'ClassTemplate'
-        ROOT.gInterpreter.ProcessLine('template <class T> class {ct} {{ }};'
+        ROOT.gCling.ProcessLine('template <class T> class {ct} {{ }};'
                                       .format(ct=class_template))
         templ_type = 'int'
 

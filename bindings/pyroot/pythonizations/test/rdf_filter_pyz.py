@@ -107,7 +107,7 @@ class PyFilter(unittest.TestCase):
         Filter operation.
         """
 
-        ROOT.gInterpreter.Declare(
+        ROOT.gCling.Declare(
             """
         struct MyFunctor
         {
@@ -128,7 +128,7 @@ class PyFilter(unittest.TestCase):
         Filter operation.
         """
 
-        ROOT.gInterpreter.Declare(
+        ROOT.gCling.Declare(
             """
         std::function<bool(ULong64_t)> myfun = [](ULong64_t l) { return l == 0; };
         """
@@ -145,7 +145,7 @@ class PyFilter(unittest.TestCase):
         Filter operation.
         """
 
-        ROOT.gInterpreter.Declare(
+        ROOT.gCling.Declare(
             """
         bool myfun(ULong64_t l) { return l == 0; }
         """
@@ -162,7 +162,7 @@ class PyFilter(unittest.TestCase):
         Filter operation with overloads.
         """
 
-        ROOT.gInterpreter.Declare(
+        ROOT.gCling.Declare(
             """
         bool myfun(ULong64_t l) { return l == 0; }
         bool myfun(int l) { return true; }
@@ -180,7 +180,7 @@ class PyFilter(unittest.TestCase):
         Filter operation.
         """
 
-        ROOT.gInterpreter.Declare(
+        ROOT.gCling.Declare(
             """
         template <typename T>
         bool myfun_t(T l) { return l == 0; }

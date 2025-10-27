@@ -111,7 +111,7 @@ class RDataFrameAsNumpy(unittest.TestCase):
         """
         Testing reading a std::array
         """
-        ROOT.gInterpreter.Declare("""
+        ROOT.gCling.Declare("""
         std::array<unsigned int, 3> create_array(unsigned int n) {
             return std::array<unsigned int, 3>({n, n, n});
         }
@@ -126,7 +126,7 @@ class RDataFrameAsNumpy(unittest.TestCase):
         """
         Testing reading a TH1F
         """
-        ROOT.gInterpreter.Declare("""
+        ROOT.gCling.Declare("""
         TH1F create_histo(unsigned int n) {
             const auto str = TString::Format("h%i", n);
             return TH1F(str, str, 4, 0, 1);
@@ -141,7 +141,7 @@ class RDataFrameAsNumpy(unittest.TestCase):
         """
         Testing reading a std::vector with constant size
         """
-        ROOT.gInterpreter.Declare("""
+        ROOT.gCling.Declare("""
         std::vector<unsigned int> create_vector_constantsize(unsigned int n) {
             return std::vector<unsigned int>({n, n, n});
         }
@@ -156,7 +156,7 @@ class RDataFrameAsNumpy(unittest.TestCase):
         """
         Testing reading a std::vector with variable size
         """
-        ROOT.gInterpreter.Declare("""
+        ROOT.gCling.Declare("""
         std::vector<unsigned int> create_vector_variablesize(unsigned int n) {
             return std::vector<unsigned int>(n);
         }
@@ -173,10 +173,10 @@ class RDataFrameAsNumpy(unittest.TestCase):
         """
 
         # The global module index does not have it preloaded and
-        # gInterpreter.Declare is not allowed to load libPhysics for
+        # gCling.Declare is not allowed to load libPhysics for
         # TLorentzVector. Preload the library now.
         ROOT.gSystem.Load("libPhysics")
-        ROOT.gInterpreter.Declare("""
+        ROOT.gCling.Declare("""
         TLorentzVector create_tlorentzvector() {
             auto v = TLorentzVector();
             v.SetPtEtaPhiM(1, 2, 3, 4);
@@ -192,7 +192,7 @@ class RDataFrameAsNumpy(unittest.TestCase):
         """
         Testing reading a custom class injected in the interpreter
         """
-        ROOT.gInterpreter.Declare("""
+        ROOT.gCling.Declare("""
         struct CustomClass {
             unsigned int fMember = 42;
         };

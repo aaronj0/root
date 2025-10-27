@@ -56,11 +56,11 @@ class TestREGRESSION:
 
         import cppyy, pydoc
 
-        assert not '__abstractmethods__' in dir(cppyy.gbl.gInterpreter)
-        assert '__class__' in dir(cppyy.gbl.gInterpreter)
+        assert not '__abstractmethods__' in dir(cppyy.gbl.gCling)
+        assert '__class__' in dir(cppyy.gbl.gCling)
 
         self.__class__.helpout = []
-        pydoc.doc(cppyy.gbl.gInterpreter)
+        pydoc.doc(cppyy.gbl.gCling)
         helptext = ''.join(self.__class__.helpout)
         assert 'TInterpreter' in helptext
         assert 'CPPInstance' in helptext

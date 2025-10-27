@@ -513,7 +513,7 @@ namespace Numba {{
         )
 
         # Jit wrapper C++ code
-        err = gbl_namespace.gInterpreter.Declare(cppwrappercode)
+        err = gbl_namespace.gCling.Declare(cppwrappercode)
         if not err:
             raise Exception("Failed to jit C++ wrapper code with cling:\n{}".format(cppwrappercode))
         func.__cpp_wrapper__ = cppwrappercode
