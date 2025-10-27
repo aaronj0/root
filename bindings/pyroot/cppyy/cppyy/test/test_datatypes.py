@@ -14,6 +14,10 @@ class TestDATATYPES:
         cls.datatypes = cppyy.load_reflection_info(cls.test_dct)
         cls.N = cppyy.gbl.N
 
+        at_least_17 = 201402 < cppyy.gbl.gCling.ProcessLine("__cplusplus;")
+        cls.has_byte     = at_least_17
+        cls.has_optional = at_least_17
+
     @mark.skip()
     def test01_instance_data_read_access(self):
         """Read access to instance public data and verify values"""

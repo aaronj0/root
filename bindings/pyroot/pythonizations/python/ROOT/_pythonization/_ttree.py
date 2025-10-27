@@ -76,7 +76,7 @@ with ROOT.TFile("outfile.root", "RECREATE") as ofile:
     # Struct as leaflist. This is interpreted on the fly,
     # but could be known to ROOT by other means, such as
     # header inclusion or dictionary load.
-    ROOT.gInterpreter.Declare('''
+    ROOT.gCling.Declare('''
     struct MyStruct {
     int myint;
     float myfloat;
@@ -144,7 +144,7 @@ with ROOT.TFile('outfile.root') as infile:
     # Struct as leaflist. This is interpreted on the fly,
     # but could be known to ROOT by other means, such as
     # header inclusion or dictionary load.
-    ROOT.gInterpreter.Declare('''
+    ROOT.gCling.Declare('''
     struct MyStruct {
     int myint;
     float myfloat;

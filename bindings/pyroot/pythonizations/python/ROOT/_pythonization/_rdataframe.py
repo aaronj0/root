@@ -34,7 +34,7 @@ snippet for an example:
 
 ~~~{.py}
 # JIT a C++ function from Python
-ROOT.gInterpreter.Declare("""
+ROOT.gCling.Declare("""
 bool myFilter(float x) {
     return x > 10;
 }
@@ -51,7 +51,7 @@ and load the function into the RDataFrame computation as follows.
 
 ~~~{.py}
 ROOT.gSystem.Load("path/to/myLibrary.so") # Library with the myFilter function
-ROOT.gInterpreter.Declare('#include "myLibrary.h"') # Header with the declaration of the myFilter function
+ROOT.gCling.Declare('#include "myLibrary.h"') # Header with the declaration of the myFilter function
 df = ROOT.RDataFrame("myTree", "myFile.root")
 sum = df.Filter("myFilter(x)").Sum("y")
 print(sum.GetValue())
@@ -208,7 +208,7 @@ h = df.Histo1D(("histName", "histTitle", 64, 0., 128.), "myColumn")
 The ROOT::RDF::AsRNode function casts an RDataFrame node to the generic ROOT::RDF::RNode type. From Python, it can be used to pass any RDataFrame node as an argument of a C++ function, as shown below:
 
 ~~~{.py}
-ROOT.gInterpreter.Declare("""
+ROOT.gCling.Declare("""
 ROOT::RDF::RNode MyTransformation(ROOT::RDF::RNode df) {
     auto myFunc = [](float x){ return -x;};
     return df.Define("y", myFunc, {"x"});
@@ -576,7 +576,7 @@ def _MakeNumpyDataFrame(np_dict):
         except AttributeError:
             pass
 
-        ROOT.gInterpreter.Declare(
+        ROOT.gCling.Declare(
             r"""
     #include <Python.h>
 
