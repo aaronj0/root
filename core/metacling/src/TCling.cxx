@@ -115,7 +115,7 @@ clang/LLVM technology.
 #include "cling/Utils/SourceNormalization.h"
 #include "cling/Interpreter/Exception.h"
 
-#include <CppInterOp/CppInterOp.h>
+#include <CppInterOp/CppInterOpDispatch.h>
 
 #include "llvm/IR/GlobalValue.h"
 #include "llvm/IR/Module.h"
