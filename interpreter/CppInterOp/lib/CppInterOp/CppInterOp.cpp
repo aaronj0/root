@@ -731,13 +731,17 @@ TCppScope_t GetNamed(const std::string& name,
     auto* D = (clang::Decl*)parent;
     D = GetUnderlyingScope(D);
     Within = llvm::dyn_cast<clang::DeclContext>(D);
+    Within->getPrimaryContext()->buildLookup();
+    // Within->buildLookup();
   }
-
+#ifdef CPPINTEROP_USE_CLING
+    cling::Interpreter::PushTransactionRAII RAII(&getInterp());
+#endif
   auto* ND = Cpp_utils::Lookup::Named(&getSema(), name, Within);
+
   if (ND && ND != (clang::NamedDecl*)-1) {
     return (TCppScope_t)(ND->getCanonicalDecl());
   }
-
   return 0;
 }
 
@@ -3741,6 +3745,9 @@ void GetAllCppNames(TCppScope_t scope, std::set<std::string>& names) {
   clang::DeclContext* DC;
   clang::DeclContext::decl_iterator decl;
 
+#ifdef CPPINTEROP_USE_CLING
+    cling::Interpreter::PushTransactionRAII RAII(&getInterp());
+#endif
   if (auto* TD = dyn_cast_or_null<TagDecl>(D)) {
     DC = clang::TagDecl::castToDeclContext(TD);
     decl = DC->decls_begin();
