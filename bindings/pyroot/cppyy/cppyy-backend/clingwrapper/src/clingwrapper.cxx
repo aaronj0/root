@@ -1,4 +1,4 @@
-#ifndef WIN32
+#ifndef _WIN32
 #ifndef _CRT_SECURE_NO_WARNINGS
 // silence warnings about getenv, strncpy, etc.
 #define _CRT_SECURE_NO_WARNINGS
@@ -37,12 +37,12 @@
 #include "TSystem.h"
 #include "TThread.h"
 
-#ifndef WIN32
+#ifndef _WIN32
 #include <dlfcn.h>
 #endif
 
 // Standard
-#include <assert.h>
+#include <cassert>
 #include <algorithm>     // for std::count, std::remove
 #include <stdexcept>
 #include <map>
@@ -50,17 +50,13 @@
 #include <regex>
 #include <set>
 #include <sstream>
-#include <signal.h>
-#include <stdlib.h>      // for getenv
-#include <string.h>
+#include <csignal>
+#include <cstdlib>      // for getenv
+#include <cstring>
 #include <typeinfo>
 #include <iostream>
 #include <vector>
-
-
-// temp
-#include <iostream>
-// --temp
+#include <mutex>
 
 // data for life time management ---------------------------------------------
 // typedef std::vector<TClassRef> ClassRefs_t;
@@ -99,6 +95,7 @@
 // static GlobalVars_t g_globalvars;
 // static GlobalVarsIndices_t g_globalidx;
 
+std::recursive_mutex InterOpMutex;
 
 // builtin types
 static std::set<std::string> g_builtins =
@@ -204,7 +201,7 @@ class ApplicationStarter {
   Cpp::TInterp_t Interp;
 public:
     ApplicationStarter() {
-
+        std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
 
         (void)gROOT;
         char *libcling = gSystem->DynamicPathName("libCling");
@@ -428,12 +425,14 @@ char* cppstring_to_cstring(const std::string& cppstr)
 // Returns false on failure and true on success
 bool Cppyy::Compile(const std::string& code, bool silent)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     // Declare returns an enum which equals 0 on success
     return !Cpp::Declare(code.c_str(), silent);
 }
 
 std::string Cppyy::ToString(TCppType_t klass, TCppObject_t obj)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     if (klass && obj && !Cpp::IsNamespace((TCppScope_t)klass))
         return Cpp::ObjToString(Cpp::GetQualifiedCompleteName(klass).c_str(),
                                     (void*)obj);
@@ -527,6 +526,7 @@ std::string Cppyy::ResolveName(const std::string& name) {
 // }
 
 Cppyy::TCppType_t Cppyy::ResolveEnumReferenceType(TCppType_t type) {
+std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     if (Cpp::GetValueKind(type) != Cpp::ValueKind::LValue)
         return type;
 
@@ -539,6 +539,7 @@ Cppyy::TCppType_t Cppyy::ResolveEnumReferenceType(TCppType_t type) {
 }
 
 Cppyy::TCppType_t Cppyy::ResolveEnumPointerType(TCppType_t type) {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     if (!Cpp::IsPointerType(type))
         return type;
 
@@ -566,6 +567,7 @@ Cppyy::TCppType_t int_like_type(Cppyy::TCppType_t type) {
 Cppyy::TCppType_t Cppyy::ResolveType(TCppType_t type) {
     if (!type) return type;
 
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     TCppType_t check_int_typedefs = int_like_type(type);
     if (check_int_typedefs)
         return type;
@@ -573,7 +575,7 @@ Cppyy::TCppType_t Cppyy::ResolveType(TCppType_t type) {
     Cppyy::TCppType_t canonType = Cpp::GetCanonicalType(type);
 
     if (Cpp::IsEnumType(canonType)) {
-        if (Cppyy::GetTypeAsString(type) != "std::byte")
+        if (Cpp::GetTypeAsString(type) != "std::byte")
             return Cpp::GetIntegerTypeFromEnumType(canonType);
     }
     if (Cpp::HasTypeQualifier(canonType, Cpp::QualKind::Restrict)) {
@@ -584,6 +586,7 @@ Cppyy::TCppType_t Cppyy::ResolveType(TCppType_t type) {
 }
 
 Cppyy::TCppType_t Cppyy::GetRealType(TCppType_t type) {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     TCppType_t check_int_typedefs = int_like_type(type);
     if (check_int_typedefs)
         return check_int_typedefs;
@@ -591,10 +594,12 @@ Cppyy::TCppType_t Cppyy::GetRealType(TCppType_t type) {
 }
 
 Cppyy::TCppType_t Cppyy::GetPointerType(TCppType_t type) {
+  std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
   return Cpp::GetPointerType(type);
 }
 
 Cppyy::TCppType_t Cppyy::GetReferencedType(TCppType_t type, bool rvalue) {
+  std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
   return Cpp::GetReferencedType(type, rvalue);
 }
 
@@ -705,15 +710,17 @@ bool Cppyy::AppendTypesSlow(const std::string& name,
   std::string resolved_name = name;
   replace_all(resolved_name, "std::initializer_list<", "std::vector<"); // replace initializer_list with vector
 
+  std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
   // We might have an entire expression such as int, double.
   static unsigned long long struct_count = 0;
   std::string code = "template<typename ...T> struct __Cppyy_AppendTypesSlow {};\n";
   if (!struct_count)
-    Cpp::Declare(code.c_str(), /*silent=*/false); // initialize the trampoline
+    Cpp::Declare(code.c_str(), /*silent=*/true); // initialize the trampoline
 
   std::string var = "__Cppyy_s" + std::to_string(struct_count++);
   // FIXME: We cannot use silent because it erases our error code from Declare!
   if (!Cpp::Declare(("__Cppyy_AppendTypesSlow<" + resolved_name + "> " + var +";\n").c_str(), /*silent=*/false)) {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     TCppType_t varN =
         Cpp::GetVariableType(Cpp::GetNamed(var.c_str(), /*parent=*/nullptr));
     TCppScope_t instance_class = Cpp::GetScopeFromType(varN);
@@ -737,7 +744,7 @@ bool Cppyy::AppendTypesSlow(const std::string& name,
     Cppyy::TCppType_t type = nullptr;
 
     type = GetType(i, /*enable_slow_lookup=*/true);
-    if (!type && parent && (Cpp::IsNamespace(parent) || Cpp::IsClass(parent))) {
+    if (!type && parent && (Cppyy::IsNamespace(parent) || Cppyy::IsClass(parent))) {
         type = Cppyy::GetTypeFromScope(Cppyy::GetNamed(resolved_name, parent));
     }
 
@@ -758,6 +765,7 @@ bool Cppyy::AppendTypesSlow(const std::string& name,
 }
 
 Cppyy::TCppType_t Cppyy::GetType(const std::string &name, bool enable_slow_lookup /* = false */) {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     static unsigned long long var_count = 0;
 
     if (auto type = Cpp::GetType(name))
@@ -785,6 +793,7 @@ Cppyy::TCppType_t Cppyy::GetType(const std::string &name, bool enable_slow_looku
 
 
 Cppyy::TCppType_t Cppyy::GetComplexType(const std::string &name) {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetComplexType(Cpp::GetType(name));
 }
 
@@ -821,6 +830,7 @@ Cppyy::TCppType_t Cppyy::GetComplexType(const std::string &name) {
 
 std::string Cppyy::ResolveEnum(TCppScope_t handle)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     std::string type = Cpp::GetTypeAsString(
         Cpp::GetIntegerTypeFromEnumScope(handle));
     if (type == "signed char")
@@ -830,12 +840,14 @@ std::string Cppyy::ResolveEnum(TCppScope_t handle)
 
 Cppyy::TCppScope_t Cppyy::GetUnderlyingScope(TCppScope_t scope)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetUnderlyingScope(scope);
 }
 
 Cppyy::TCppScope_t Cppyy::GetScope(const std::string& name,
                                    TCppScope_t parent_scope)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
 // CppInterOp directly looks at the AST which is not enough.
 // We require lazy module loading that ROOT relies on, so we do it here first.
 // Use TClass::GetClass to trigger auto-loading of dictionaries and
@@ -863,10 +875,13 @@ Cppyy::TCppScope_t Cppyy::GetScope(const std::string& name,
 
       if (Cppyy::IsTemplate(scope)) {
         std::vector<Cpp::TemplateArgInfo> templ_params;
-        if (!Cppyy::AppendTypesSlow(params, templ_params))
+        InterOpMutex.unlock(); // unlock to allow AppendTypesSlow
+        if (!Cppyy::AppendTypesSlow(params, templ_params)) {
+          std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
           return Cpp::InstantiateTemplate(scope, templ_params.data(),
                                           templ_params.size(),
                                           /*instantiate_body=*/false);
+        }
       }
     }
     return nullptr;
@@ -879,6 +894,7 @@ Cppyy::TCppScope_t Cppyy::GetFullScope(const std::string& name)
 
 Cppyy::TCppScope_t Cppyy::GetTypeScope(TCppScope_t var)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetScopeFromType(
         Cpp::GetVariableType(var));
 }
@@ -886,26 +902,31 @@ Cppyy::TCppScope_t Cppyy::GetTypeScope(TCppScope_t var)
 Cppyy::TCppScope_t Cppyy::GetNamed(const std::string& name,
                                    TCppScope_t parent_scope)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetNamed(name, parent_scope);
 }
 
 Cppyy::TCppScope_t Cppyy::GetParentScope(TCppScope_t scope)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetParentScope(scope);
 }
 
 Cppyy::TCppScope_t Cppyy::GetScopeFromType(TCppType_t type)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetScopeFromType(type);
 }
 
 Cppyy::TCppType_t Cppyy::GetTypeFromScope(TCppScope_t klass)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetTypeFromScope(klass);
 }
 
 Cppyy::TCppScope_t Cppyy::GetGlobalScope()
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetGlobalScope();
 }
 
@@ -932,6 +953,8 @@ public:
 } // namespace
 
 Cppyy::TCppScope_t Cppyy::GetActualClass(TCppScope_t klass, TCppObject_t obj) {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
+
     if (!Cpp::IsClassPolymorphic(klass))
         return klass;
 
@@ -941,12 +964,11 @@ Cppyy::TCppScope_t Cppyy::GetActualClass(TCppScope_t klass, TCppObject_t obj) {
     std::string demangled_name = Cpp::Demangle(mangled_name);
 
     if (TCppScope_t scope = Cppyy::GetScope(demangled_name)) {
-    // Only return the derived type if it has a complete definition in the
-    // interpreter. Internal classes like TCling have no public header and
+    // Only return the derived type if theres a complete definition in the
+    // interpreter. internal classes like TCling have no public header and
     // no dictionary, so their CXXRecordDecl has no DefinitionData.
-    // returning them crashes when querying bases/offsets. Fall back
-    // to the declared base type instead (equivalent to a
-    // clActual->GetClassInfo() guard).
+    // returning them crashes when querying offsets. Fall back to the base
+    // type if the derived type is incomplete.
         if (Cpp::IsComplete(scope))
             return scope;
     }
@@ -956,11 +978,13 @@ Cppyy::TCppScope_t Cppyy::GetActualClass(TCppScope_t klass, TCppObject_t obj) {
 
 size_t Cppyy::SizeOf(TCppScope_t klass)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::SizeOf(klass);
 }
 
 size_t Cppyy::SizeOfType(TCppType_t klass)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetSizeOfType(klass);
 }
 
@@ -995,28 +1019,35 @@ bool Cppyy::IsBuiltin(TCppType_t type)
 
 bool Cppyy::IsComplete(TCppScope_t scope)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::IsComplete(scope);
 }
 
 // // memory management ---------------------------------------------------------
 Cppyy::TCppObject_t Cppyy::Allocate(TCppScope_t scope)
 {
-  return Cpp::Allocate(scope, /*count=*/1);
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
+    return Cpp::Allocate(scope, /*count=*/1);
 }
 
 void Cppyy::Deallocate(TCppScope_t scope, TCppObject_t instance)
 {
+  std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
   Cpp::Deallocate(scope, instance, /*count=*/1);
 }
 
 Cppyy::TCppObject_t Cppyy::Construct(TCppScope_t scope, void* arena/*=nullptr*/)
 {
-  return Cpp::Construct(scope, arena, /*count=*/1);
+    // TODO: this shouldn't locks the JIT call
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
+    return Cpp::Construct(scope, arena, /*count=*/1);
 }
 
 void Cppyy::Destruct(TCppScope_t scope, TCppObject_t instance)
 {
-  Cpp::Destruct(instance, scope, true, /*count=*/0);
+    // TODO: this shouldn't locks the JIT call
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
+    Cpp::Destruct(instance, scope, true, /*count=*/0);
 }
 
 static inline
@@ -1063,8 +1094,9 @@ bool WrapperCall(Cppyy::TCppMethod_t method, size_t nargs, void* args_, void* se
 
     // if (!is_ready(wrap, is_direct))
     //     return false;        // happens with compilation error
-
+    InterOpMutex.lock();
     if (Cpp::JitCall JC = Cpp::MakeFunctionCallable(method)) {
+        InterOpMutex.unlock();
         bool runRelease = false;
         //const auto& fgen = /* is_direct ? faceptr.fDirect : */ faceptr;
         if (nargs <= SMALL_ARGS_N) {
@@ -1084,6 +1116,7 @@ bool WrapperCall(Cppyy::TCppMethod_t method, size_t nargs, void* args_, void* se
         return true;
     }
 
+    InterOpMutex.unlock();
     return false;
 }
 
@@ -1162,13 +1195,15 @@ Cppyy::TCppObject_t Cppyy::CallConstructor(
 
 void Cppyy::CallDestructor(TCppScope_t scope, TCppObject_t self)
 {
-  Cpp::Destruct(self, scope, /*withFree=*/false, /*count=*/0);
+    // TODO: this shouldn't locks the JIT call
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
+    Cpp::Destruct(self, scope, /*withFree=*/false, /*count=*/0);
 }
 
 Cppyy::TCppObject_t Cppyy::CallO(TCppMethod_t method,
     TCppObject_t self, size_t nargs, void* args, TCppType_t result_type)
 {
-    void* obj = ::operator new(Cpp::GetSizeOfType(result_type));
+    void* obj = ::operator new(Cppyy::SizeOfType(result_type));
     if (WrapperCall(method, nargs, args, self, obj))
         return (TCppObject_t)obj;
     ::operator delete(obj);
@@ -1177,6 +1212,7 @@ Cppyy::TCppObject_t Cppyy::CallO(TCppMethod_t method,
 
 Cppyy::TCppFuncAddr_t Cppyy::GetFunctionAddress(TCppMethod_t method, bool check_enabled)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return (TCppFuncAddr_t) Cpp::GetFunctionAddress(method);
 }
 
@@ -1208,6 +1244,7 @@ bool Cppyy::IsNamespace(TCppScope_t scope)
 {
     if (!scope)
       return false;
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
 
     // Test if this scope represents a namespace.
     return Cpp::IsNamespace(scope) || Cpp::GetGlobalScope() == scope;
@@ -1232,7 +1269,7 @@ bool Cppyy::IsEnumScope(TCppScope_t scope)
 
 bool Cppyy::IsEnumConstant(TCppScope_t scope)
 {
-  return Cpp::IsEnumConstant(Cpp::GetUnderlyingScope(scope));
+  return Cpp::IsEnumConstant(Cppyy::GetUnderlyingScope(scope));
 }
 
 bool Cppyy::IsEnumType(TCppType_t type)
@@ -1248,6 +1285,7 @@ bool Cppyy::IsAggregate(TCppType_t type)
 
 bool Cppyy::IsDefaultConstructable(TCppScope_t scope)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
 // Test if this type has a default constructor or is a "plain old data" type
     return Cpp::HasDefaultConstructor(scope);
 }
@@ -1337,6 +1375,7 @@ void Cppyy::GetAllCppNames(TCppScope_t scope, std::set<std::string>& cppnames)
 // Collect all known names of C++ entities under scope. This is useful for IDEs
 // employing tab-completion, for example. Note that functions names need not be
 // unique as they can be overloaded.
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     Cpp::GetAllCppNames(scope, cppnames);
 }
 
@@ -1344,22 +1383,26 @@ void Cppyy::GetAllCppNames(TCppScope_t scope, std::set<std::string>& cppnames)
 // // class reflection information ----------------------------------------------
 std::vector<Cppyy::TCppScope_t> Cppyy::GetUsingNamespaces(TCppScope_t scope)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetUsingNamespaces(scope);
 }
 
 // // class reflection information ----------------------------------------------
 std::string Cppyy::GetFinalName(TCppType_t klass)
 {
+  std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
   return Cpp::GetCompleteName(Cpp::GetUnderlyingScope(klass));
 }
 
 std::string Cppyy::GetScopedFinalName(TCppType_t klass)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetQualifiedCompleteName(klass);
 }
 
 bool Cppyy::HasVirtualDestructor(TCppScope_t scope)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     TCppMethod_t func = Cpp::GetDestructor(scope);
     return Cpp::IsVirtualMethod(func);
 }
@@ -1390,6 +1433,7 @@ bool Cppyy::HasVirtualDestructor(TCppScope_t scope)
 
 Cppyy::TCppIndex_t Cppyy::GetNumBases(TCppScope_t klass)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
 // Get the total number of base classes that this class has.
     return Cpp::GetNumBases(klass);
 }
@@ -1426,16 +1470,19 @@ Cppyy::TCppIndex_t Cppyy::GetNumBasesLongestBranch(TCppScope_t klass) {
 
 std::string Cppyy::GetBaseName(TCppType_t klass, TCppIndex_t ibase)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetName(Cpp::GetBaseClass(klass, ibase));
 }
 
 Cppyy::TCppScope_t Cppyy::GetBaseScope(TCppScope_t klass, TCppIndex_t ibase)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetBaseClass(klass, ibase);
 }
 
 bool Cppyy::IsSubclass(TCppScope_t derived, TCppScope_t base)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::IsSubclass(derived, base);
 }
 
@@ -1465,13 +1512,16 @@ bool Cppyy::GetSmartPtrInfo(
         return false;
 
     std::vector<TCppMethod_t> ops;
-    Cpp::GetOperator(scope, Cpp::Operator::OP_Arrow, ops,
-                     /*kind=*/Cpp::OperatorArity::kBoth);
+    {
+        std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
+        Cpp::GetOperator(scope, Cpp::Operator::OP_Arrow, ops,
+                         /*kind=*/Cpp::OperatorArity::kBoth);
+    }
     if (ops.size() != 1)
         return false;
 
     if (deref) *deref = ops[0];
-    if (raw) *raw = Cppyy::GetScopeFromType(Cpp::GetFunctionReturnType(ops[0]));
+    if (raw) *raw = Cppyy::GetScopeFromType(Cppyy::GetMethodReturnType(ops[0]));
     return (!deref || *deref) && (!raw || *raw);
 }
 
@@ -1489,7 +1539,8 @@ bool Cppyy::GetSmartPtrInfo(
 // type offsets --------------------------------------------------------------
 ptrdiff_t Cppyy::GetBaseOffset(TCppScope_t derived, TCppScope_t base,
     TCppObject_t address, int direction, bool rerror)
-{   
+{
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     // Either base or derived class is incomplete, treat silently
     if (!Cpp::IsComplete(derived) || !Cpp::IsComplete(base))
         return rerror ? (ptrdiff_t)-1 : 0;
@@ -1536,12 +1587,14 @@ ptrdiff_t Cppyy::GetBaseOffset(TCppScope_t derived, TCppScope_t base,
 
 void Cppyy::GetClassMethods(TCppScope_t scope, std::vector<Cppyy::TCppMethod_t> &methods)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     Cpp::GetClassMethods(scope, methods);
 }
 
 std::vector<Cppyy::TCppScope_t> Cppyy::GetMethodsFromName(
     TCppScope_t scope, const std::string& name)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetFunctionsUsingName(scope, name);
 }
 
@@ -1560,11 +1613,13 @@ std::vector<Cppyy::TCppScope_t> Cppyy::GetMethodsFromName(
 //
 std::string Cppyy::GetMethodName(TCppMethod_t method)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetName(method);
 }
 
 std::string Cppyy::GetMethodFullName(TCppMethod_t method)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetCompleteName(method);
 }
 
@@ -1577,12 +1632,14 @@ std::string Cppyy::GetMethodFullName(TCppMethod_t method)
 
 Cppyy::TCppType_t Cppyy::GetMethodReturnType(TCppMethod_t method)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetFunctionReturnType(method);
 }
 
 std::string Cppyy::GetMethodReturnTypeAsString(TCppMethod_t method)
 {
-    return 
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
+    return
     Cpp::GetTypeAsString(
         Cpp::GetCanonicalType(
             Cpp::GetFunctionReturnType(method)));
@@ -1590,11 +1647,13 @@ std::string Cppyy::GetMethodReturnTypeAsString(TCppMethod_t method)
 
 Cppyy::TCppIndex_t Cppyy::GetMethodNumArgs(TCppMethod_t method)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetFunctionNumArgs(method);
 }
 
 Cppyy::TCppIndex_t Cppyy::GetMethodReqArgs(TCppMethod_t method)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetFunctionRequiredArgs(method);
 }
 
@@ -1602,23 +1661,27 @@ std::string Cppyy::GetMethodArgName(TCppMethod_t method, TCppIndex_t iarg)
 {
     if (!method)
         return "<unknown>";
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
 
     return Cpp::GetFunctionArgName(method, iarg);
 }
 
 Cppyy::TCppType_t Cppyy::GetMethodArgType(TCppMethod_t method, TCppIndex_t iarg)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetFunctionArgType(method, iarg);
 }
 
 std::string Cppyy::GetMethodArgTypeAsString(TCppMethod_t method, TCppIndex_t iarg)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
   return Cpp::GetTypeAsString(Cpp::RemoveTypeQualifier(
       Cpp::GetFunctionArgType(method, iarg), Cpp::QualKind::Const));
 }
 
 std::string Cppyy::GetMethodArgCanonTypeAsString(TCppMethod_t method, TCppIndex_t iarg)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return
     Cpp::GetTypeAsString(
         Cpp::GetCanonicalType(
@@ -1629,6 +1692,8 @@ std::string Cppyy::GetMethodArgDefault(TCppMethod_t method, TCppIndex_t iarg)
 {
     if (!method)
        return "";
+
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetFunctionArgDefault(method, iarg);
 }
 
@@ -1689,6 +1754,7 @@ std::string Cppyy::GetMethodPrototype(TCppMethod_t method, bool show_formal_args
 
 std::string Cppyy::GetDoxygenComment(TCppScope_t scope, bool strip_markers)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetDoxygenComment(scope, strip_markers);
 }
 
@@ -1696,16 +1762,19 @@ bool Cppyy::IsConstMethod(TCppMethod_t method)
 {
     if (!method)
         return false;
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::IsConstMethod(method);
 }
 
 void Cppyy::GetTemplatedMethods(TCppScope_t scope, std::vector<Cppyy::TCppMethod_t> &methods)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     Cpp::GetFunctionTemplatedDecls(scope, methods);
 }
 
 Cppyy::TCppIndex_t Cppyy::GetNumTemplatedMethods(TCppScope_t scope, bool accept_namespace)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     std::vector<Cppyy::TCppMethod_t> mc;
     Cpp::GetFunctionTemplatedDecls(scope, mc);
     return mc.size();
@@ -1713,16 +1782,18 @@ Cppyy::TCppIndex_t Cppyy::GetNumTemplatedMethods(TCppScope_t scope, bool accept_
 
 std::string Cppyy::GetTemplatedMethodName(TCppScope_t scope, TCppIndex_t imeth)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     std::vector<Cppyy::TCppMethod_t> mc;
     Cpp::GetFunctionTemplatedDecls(scope, mc);
 
-    if (imeth < mc.size()) return GetMethodName(mc[imeth]);
+    if (imeth < mc.size()) return Cpp::GetName(mc[imeth]);
 
     return "";
 }
 
 bool Cppyy::ExistsMethodTemplate(TCppScope_t scope, const std::string& name)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::ExistsFunctionTemplate(name, scope);
 }
 
@@ -1754,9 +1825,9 @@ Cppyy::TCppMethod_t Cppyy::GetMethodTemplate(
         pureName = name;
     }
 
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     std::vector<Cppyy::TCppMethod_t> unresolved_candidate_methods;
-    Cpp::GetClassTemplatedMethods(pureName, scope,
-                                  unresolved_candidate_methods);
+    Cpp::GetClassTemplatedMethods(pureName, scope, unresolved_candidate_methods);
     if (unresolved_candidate_methods.empty() && name.find("operator") == 0) {
         // try operators
         Cppyy::GetClassOperators(scope, pureName, unresolved_candidate_methods);
@@ -1768,14 +1839,16 @@ Cppyy::TCppMethod_t Cppyy::GetMethodTemplate(
     Cppyy::AppendTypesSlow(proto, arg_types, scope);
     Cppyy::AppendTypesSlow(explicit_params, templ_params, scope);
 
-    Cppyy::TCppMethod_t cppmeth = Cpp::BestOverloadFunctionMatch(
+    Cppyy::TCppMethod_t cppmeth = nullptr;
+    cppmeth = Cpp::BestOverloadFunctionMatch(
         unresolved_candidate_methods, templ_params, arg_types);
 
     if (!cppmeth && unresolved_candidate_methods.size() == 1 &&
-        !templ_params.empty())
+        !templ_params.empty()) {
       cppmeth = Cpp::InstantiateTemplate(
           unresolved_candidate_methods[0], templ_params.data(),
           templ_params.size(), /*instantiate_body=*/false);
+    }
 
     return cppmeth;
 
@@ -1796,8 +1869,6 @@ static inline std::string type_remap(const std::string& n1,
         return "std::basic_string<char>&"; // probably best bet
     } else if (n1 == "std::basic_string<wchar_t>") {
         return "std::basic_string<wchar_t>&";
-    } else if (n1 == "float") {
-        return "double"; // debatable, but probably intended
     } else if (n1 == "complex") {
         return "std::complex<double>";
     }
@@ -1807,6 +1878,7 @@ static inline std::string type_remap(const std::string& n1,
 void Cppyy::GetClassOperators(Cppyy::TCppScope_t klass,
                               const std::string& opname,
                               std::vector<TCppScope_t>& operators) {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     std::string op = opname.substr(8);
     Cpp::GetOperator(klass, Cpp::GetOperatorFromSpelling(op), operators,
                      /*kind=*/Cpp::OperatorArity::kBoth);
@@ -1817,75 +1889,31 @@ Cppyy::TCppMethod_t Cppyy::GetGlobalOperator(
 {
     std::string rc_type = type_remap(rc, lc);
     std::string lc_type = type_remap(lc, rc);
-    bool is_templated = false;
-    if ((lc_type.find('<') != std::string::npos) ||
-        (rc_type.find('<') != std::string::npos)) {
-        is_templated = true;
-    }
 
     std::vector<TCppScope_t> overloads;
     Cpp::GetOperator(scope, Cpp::GetOperatorFromSpelling(opname), overloads,
                      /*kind=*/Cpp::OperatorArity::kBoth);
 
-    std::vector<Cppyy::TCppMethod_t> unresolved_candidate_methods;
-    for (auto overload: overloads) {
-        if (Cpp::IsTemplatedFunction(overload)) {
-            unresolved_candidate_methods.push_back(overload);
-            continue;
-        } else {
-            TCppType_t lhs_type = Cpp::GetFunctionArgType(overload, 0);
-            if (lc_type !=
-                Cpp::GetTypeAsString(Cpp::GetUnderlyingType(lhs_type)))
-                continue;
+    std::vector<Cpp::TemplateArgInfo> arg_types;
+    if (auto l = Cppyy::GetScope(lc_type, 0))
+        arg_types.emplace_back(Cppyy::GetReferencedType(Cppyy::GetTypeFromScope(l)));
+    else if (auto l = Cppyy::GetType(lc_type))
+        arg_types.emplace_back(l);
+    else
+        return nullptr;
 
-            if (!rc_type.empty()) {
-                if (Cpp::GetFunctionNumArgs(overload) != 2)
-                    continue;
-                TCppType_t rhs_type = Cpp::GetFunctionArgType(overload, 1);
-                if (rc_type !=
-                    Cpp::GetTypeAsString(Cpp::GetUnderlyingType(rhs_type)))
-                    continue;
-            }
-            return overload;
-        }
-    }
-    if (is_templated) {
-        std::string lc_template = lc_type.substr(
-            lc_type.find("<") + 1, lc_type.rfind(">") - lc_type.find("<") - 1);
-        std::string rc_template = rc_type.substr(
-            rc_type.find("<") + 1, rc_type.rfind(">") - rc_type.find("<") - 1);
-
-        std::vector<Cpp::TemplateArgInfo> arg_types;
-        if (auto l = Cppyy::GetType(lc_type, true))
-            arg_types.emplace_back(l);
+    if (!rc_type.empty()) {
+        if (auto r = Cppyy::GetScope(rc_type, 0))
+            arg_types.emplace_back(Cppyy::GetReferencedType(Cppyy::GetTypeFromScope(r)));
+        else if (auto r = Cppyy::GetType(rc_type))
+            arg_types.emplace_back(r);
         else
             return nullptr;
-
-        if (!rc_type.empty()) {
-            if (auto r = Cppyy::GetType(rc_type, true))
-                arg_types.emplace_back(r);
-            else
-                return nullptr;
-        }
-        Cppyy::TCppMethod_t cppmeth = Cpp::BestOverloadFunctionMatch(
-            unresolved_candidate_methods, {}, arg_types);
-        if (cppmeth)
-            return cppmeth;
     }
-    {
-        // we are trying to do a madeup IntegralToFloating implicit cast emulating clang
-        bool flag = false;
-        if (rc_type == "int") {
-            rc_type = "double";
-            flag = true;
-        }
-        if (lc_type == "int") {
-            lc_type = "double";
-            flag = true;
-        }
-        if (flag)
-            return GetGlobalOperator(scope, lc_type, rc_type, opname);
-    }
+    Cppyy::TCppMethod_t cppmeth = Cpp::BestOverloadFunctionMatch(
+        overloads, {}, arg_types);
+    if (cppmeth)
+        return cppmeth;
     return nullptr;
 }
 
@@ -1949,12 +1977,14 @@ bool Cppyy::IsExplicit(TCppMethod_t method)
 
 void Cppyy::GetDatamembers(TCppScope_t scope, std::vector<TCppScope_t>& datamembers)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     Cpp::GetDatamembers(scope, datamembers);
     Cpp::GetStaticDatamembers(scope, datamembers);
     Cpp::GetEnumConstantDatamembers(scope, datamembers, false);
 }
 
 bool Cppyy::CheckDatamember(TCppScope_t scope, const std::string& name) {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return (bool) Cpp::LookupDatamember(name, scope);
 }
 
@@ -1963,6 +1993,7 @@ bool Cppyy::IsLambdaClass(TCppType_t type) {
 }
 
 Cppyy::TCppScope_t Cppyy::WrapLambdaFromVariable(TCppScope_t var) {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     std::ostringstream code;
     std::string name = Cppyy::GetFinalName(var);
     code << "namespace __cppyy_internal_wrap_g {\n"
@@ -1978,6 +2009,8 @@ Cppyy::TCppScope_t Cppyy::WrapLambdaFromVariable(TCppScope_t var) {
 }
 
 Cppyy::TCppScope_t Cppyy::AdaptFunctionForLambdaReturn(TCppScope_t fn) {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
+
     std::string fn_name = Cpp::GetQualifiedCompleteName(fn);
     std::string signature = Cppyy::GetMethodSignature(fn, true);
 
@@ -2030,22 +2063,26 @@ Cppyy::TCppScope_t Cppyy::AdaptFunctionForLambdaReturn(TCppScope_t fn) {
 
 Cppyy::TCppType_t Cppyy::GetDatamemberType(TCppScope_t var)
 {
+  std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
   return Cpp::GetVariableType(Cpp::GetUnderlyingScope(var));
 }
 
 std::string Cppyy::GetDatamemberTypeAsString(TCppScope_t scope)
 {
+  std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
   return Cpp::GetTypeAsString(
       Cpp::GetVariableType(Cpp::GetUnderlyingScope(scope)));
 }
 
 std::string Cppyy::GetTypeAsString(TCppType_t type)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetTypeAsString(type);
 }
 
 intptr_t Cppyy::GetDatamemberOffset(TCppScope_t var, TCppScope_t klass)
 {
+  std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
   return Cpp::GetVariableOffset(Cpp::GetUnderlyingScope(var), klass);
 }
 
@@ -2138,7 +2175,7 @@ bool Cppyy::IsPrivateData(TCppScope_t datamem)
 
 bool Cppyy::IsStaticDatamember(TCppScope_t var)
 {
-  return Cpp::IsStaticVariable(Cpp::GetUnderlyingScope(var));
+  return Cpp::IsStaticVariable(Cppyy::GetUnderlyingScope(var));
 }
 
 bool Cppyy::IsConstVar(TCppScope_t var)
@@ -2147,6 +2184,8 @@ bool Cppyy::IsConstVar(TCppScope_t var)
 }
 
 Cppyy::TCppScope_t Cppyy::ReduceReturnType(TCppScope_t fn, TCppType_t reduce) {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
+
     std::string fn_name = Cpp::GetQualifiedCompleteName(fn);
     std::string signature = Cppyy::GetMethodSignature(fn, true);
     std::string result_type = Cppyy::GetTypeAsString(reduce);
@@ -2216,22 +2255,26 @@ Cppyy::TCppScope_t Cppyy::ReduceReturnType(TCppScope_t fn, TCppType_t reduce) {
 
 std::vector<long int>  Cppyy::GetDimensions(TCppType_t type)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetDimensions(type);
 }
 
 // enum properties -----------------------------------------------------------
 std::vector<Cppyy::TCppScope_t> Cppyy::GetEnumConstants(TCppScope_t scope)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetEnumConstants(scope);
 }
 
 Cppyy::TCppType_t Cppyy::GetEnumConstantType(TCppScope_t scope)
 {
+  std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
   return Cpp::GetEnumConstantType(Cpp::GetUnderlyingScope(scope));
 }
 
 Cppyy::TCppIndex_t Cppyy::GetEnumDataValue(TCppScope_t scope)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetEnumConstantValue(scope);
 }
 
@@ -2249,11 +2292,13 @@ Cppyy::TCppIndex_t Cppyy::GetEnumDataValue(TCppScope_t scope)
 Cppyy::TCppScope_t Cppyy::InstantiateTemplate(
              TCppScope_t tmpl, Cpp::TemplateArgInfo* args, size_t args_size)
 {
-  return Cpp::InstantiateTemplate(tmpl, args, args_size,
-                                  /*instantiate_body=*/false);
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
+    return Cpp::InstantiateTemplate(tmpl, args, args_size,
+                                    /*instantiate_body=*/false);
 }
 
 void Cppyy::DumpScope(TCppScope_t scope)
 {
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     Cpp::DumpScope(scope);
 }

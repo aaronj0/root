@@ -60,7 +60,7 @@ namespace Cppyy {
     bool Compile(const std::string& code, bool silent = false);
     RPY_EXPORTED
     std::string ToString(TCppType_t klass, TCppObject_t obj);
-//
+
 // // name to opaque C++ scope representation -----------------------------------
     RPY_EXPORTED
     std::string ResolveName(const std::string& cppitem_name);
@@ -385,8 +385,9 @@ namespace Cppyy {
     bool IsConstVar(TCppScope_t var);
     RPY_EXPORTED
     TCppScope_t ReduceReturnType(TCppScope_t fn, TCppType_t reduce);
-//     RPY_EXPORTED
-//     bool IsEnumData(TCppScope_t scope, TCppIndex_t idata);
+    //  IsEnumData is unused.
+    //  RPY_EXPORTED
+    //  bool IsEnumData(TCppScope_t scope, TCppIndex_t idata);
     RPY_EXPORTED
     std::vector<long int> GetDimensions(TCppType_t type);
 
@@ -411,6 +412,5 @@ namespace Cppyy {
     RPY_EXPORTED
     void        DumpScope(TCppScope_t scope);
 } // namespace Cppyy
-
 
 #endif // !CPYCPPYY_CPPYY_H

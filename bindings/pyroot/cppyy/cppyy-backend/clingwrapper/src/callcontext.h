@@ -4,8 +4,7 @@
 // Standard
 #include <vector>
 
-//ROOT
-// #include "Rtypes.h"
+
 
 namespace CPyCppyy {
 
