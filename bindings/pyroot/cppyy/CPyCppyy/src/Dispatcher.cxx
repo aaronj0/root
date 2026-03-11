@@ -39,13 +39,15 @@ static inline void InjectMethod(Cppyy::TCppMethod_t method, const std::string& m
 // program shutdown); note that this means that the actual result will be the default
 // and the caller may need to act on that, but that's still an improvement over a
 // possible crash
-    code << "    PyObject* iself = (PyObject*)_internal_self;\n"
+    code << "    CPyCppyy::PythonGILRAII python_gil_raii;\n" // acquire GIL
+            "    PyObject* iself = (PyObject*)_internal_self;\n"
             "    if (!iself || iself == Py_None) {\n"
-            "      PyErr_Warn(PyExc_RuntimeWarning, (char*)\"Call attempted on deleted python-side proxy\");\n"
+            "      PyErr_Warn(PyExc_RuntimeWarning, (char*)\"Call attempted on "
+            "deleted python-side proxy\");\n"
             "      return";
     if (retType != "void") {
         if (retType.back() != '*')
-            code << " " << CPyCppyy::TypeManip::remove_const(retType) << "{}";
+            code << " (" << CPyCppyy::TypeManip::remove_const(retType) << "){}";
         else
             code << " nullptr";
     }
@@ -239,6 +241,7 @@ bool CPyCppyy::InsertDispatcher(CPPScope* klass, PyObject* bases, PyObject* dct,
 // object goes before the C++ one, only __del__ is called)
     if (PyMapping_HasKeyString(dct, (char*)"__destruct__")) {
         code << "  virtual ~" << derivedName << "() {\n"
+                "    CPyCppyy::PythonGILRAII python_gil_raii;\n"
                 "    PyObject* iself = (PyObject*)_internal_self;\n"
                 "    if (!iself || iself == Py_None)\n"
                 "      return;\n"      // safe, as destructor always returns void
@@ -321,7 +324,10 @@ bool CPyCppyy::InsertDispatcher(CPPScope* klass, PyObject* bases, PyObject* dct,
                     code << "{\n    return " << binfo.bname << "::" << mtCppName << "(";
                     for (Cppyy::TCppIndex_t i = 0; i < nArgs; ++i) {
                         if (i != 0) code << ", ";
-                        code << "arg" << i;
+                        if (Cppyy::IsRValueReferenceType(Cppyy::GetMethodArgType(method, i)))
+                            code << "std::move(arg" << i << ")";
+                        else
+                            code << "arg" << i;
                     }
                     code << ");\n  }\n";
                 }
@@ -453,6 +459,7 @@ bool CPyCppyy::InsertDispatcher(CPPScope* klass, PyObject* bases, PyObject* dct,
 
 // provide an accessor to re-initialize after round-tripping from C++ (internal)
     code << "\n  static PyObject* _get_dispatch(" << derivedName << "* inst) {\n"
+            "    CPyCppyy::PythonGILRAII python_gil_raii;\n"
             "    PyObject* res = (PyObject*)inst->_internal_self;\n"
             "    Py_XINCREF(res); return res;\n  }";
 

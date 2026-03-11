@@ -4,6 +4,7 @@
 #include "CPPFunction.h"
 #include "CPPInstance.h"
 #include "CPPOverload.h"
+#include "CPyCppyy/DispatchPtr.h"
 #include "ProxyWrappers.h"
 #include "PyCallable.h"
 #include "PyStrings.h"
@@ -561,9 +562,10 @@ static bool AddTypeName(std::string& tmpl_name, PyObject* tn, PyObject* arg,
             PyErr_Clear();
 
     // ctypes function pointer
-        PyObject* argtypes = PyObject_GetAttrString(arg, "argtypes");
-        PyObject* ret = PyObject_GetAttrString(arg, "restype");
-        if (argtypes && ret) {
+        PyObject* argtypes = nullptr;
+        PyObject* ret = nullptr;
+        if ((argtypes = PyObject_GetAttrString(arg, "argtypes"))
+            && (ret = PyObject_GetAttrString(arg, "restype"))) {
             std::ostringstream tpn;
             PyObject* pytc = PyObject_GetAttr(ret, PyStrings::gCTypesType);
             tpn << CT2CppNameS(pytc, false)
@@ -662,6 +664,8 @@ std::string CPyCppyy::Utility::ConstructTemplateArgs(
     // __cpp_name__ and/or __name__ is rather expensive)
         } else {
             if (!AddTypeName(tmpl_name, tn, (args ? PyTuple_GET_ITEM(args, i) : nullptr), pref, pcnt)) {
+                PyErr_SetString(PyExc_SyntaxError,
+                    "could not construct C++ name from provided template argument.");
                 return "";
             }
         }
@@ -1003,9 +1007,6 @@ void CPyCppyy::Utility::ConstructCallbackPreamble(const std::string& retType,
     if (!isVoid)
         code << "    " << retType << " ret{};\n";
 
-// acquire GIL
-    code << "    PyGILState_STATE state = PyGILState_Ensure();\n";
-
 // build argument tuple if needed
     if (nArgs) {
         code << "    std::vector<PyObject*> pyargs;\n";
@@ -1019,7 +1020,7 @@ void CPyCppyy::Utility::ConstructCallbackPreamble(const std::string& retType,
         }
         code << "    } catch(int) {\n"
              << "      for (auto pyarg : pyargs) Py_XDECREF(pyarg);\n"
-             << "      CPyCppyy::PyException pyexc; PyGILState_Release(state); throw pyexc;\n"
+             << "      CPyCppyy::PyException pyexc; throw pyexc;\n"
              << "    }\n";
     }
 }
@@ -1050,9 +1051,8 @@ void CPyCppyy::Utility::ConstructCallbackReturn(const std::string& retType, int 
 #ifdef _WIN32
             " /* do nothing */ }\n"
 #else
-            " CPyCppyy::PyException pyexc; PyGILState_Release(state); throw pyexc; }\n"
+            " CPyCppyy::PyException pyexc; throw pyexc; }\n"
 #endif
-            "    PyGILState_Release(state);\n"
             "    return";
     code << (isVoid ? ";\n  }\n" : " ret;\n  }\n");
 }
@@ -1182,6 +1182,11 @@ Py_ssize_t CPyCppyy::Utility::GetBuffer(PyObject* pyobject, char tc, int size, v
     if (PyObject_CheckBuffer(pyobject)) {
         if (PySequence_Check(pyobject) && !PySequence_Size(pyobject))
             return 0;   // PyObject_GetBuffer() crashes on some platforms for some zero-sized seqeunces
+        if (PyErr_Occurred()) {
+            // PySequence_Size errored with 
+            // TypeError: object of type 'LP_c_type' has no len()
+            PyErr_Clear();
+        }
 
         Py_buffer bufinfo;
         memset(&bufinfo, 0, sizeof(Py_buffer));
@@ -1268,15 +1273,14 @@ Py_ssize_t CPyCppyy::Utility::GetBuffer(PyObject* pyobject, char tc, int size, v
                 buf = 0;                      // not compatible
 
             // clarify error message
-                PyObject* pytype = 0, *pyvalue = 0, *pytrace = 0;
-                PyErr_Fetch(&pytype, &pyvalue, &pytrace);
+                auto error = FetchPyError();
                 PyObject* pyvalue2 = CPyCppyy_PyText_FromFormat(
                     (char*)"%s and given element size (%ld) do not match needed (%d)",
-                    CPyCppyy_PyText_AsString(pyvalue),
+                    CPyCppyy_PyText_AsString(error.fValue.get()),
                     seqmeths->sq_length ? (long)(buflen/(*(seqmeths->sq_length))(pyobject)) : (long)buflen,
                     size);
-                Py_DECREF(pyvalue);
-                PyErr_Restore(pytype, pyvalue2, pytrace);
+                error.fValue.reset(pyvalue2);
+                RestorePyError(error);
             }
         }
 
@@ -1414,9 +1418,8 @@ PyObject* CPyCppyy::Utility::PyErr_Occurred_WithGIL()
 // released; note that the p2.2 code assumes that there are no callbacks in
 // C++ to python (or at least none returning errors).
 #if PY_VERSION_HEX >= 0x02030000
-    PyGILState_STATE gstate = PyGILState_Ensure();
+    PythonGILRAII python_gil_raii;
     PyObject* e = PyErr_Occurred();
-    PyGILState_Release(gstate);
 #else
     if (PyThreadState_GET())
         return PyErr_Occurred();
@@ -1428,19 +1431,49 @@ PyObject* CPyCppyy::Utility::PyErr_Occurred_WithGIL()
 
 
 //----------------------------------------------------------------------------
+CPyCppyy::Utility::PyError_t CPyCppyy::Utility::FetchPyError()
+{
+   // create a PyError_t RAII object that will capture and store the exception data
+   CPyCppyy::Utility::PyError_t error{};
+#if PY_VERSION_HEX >= 0x030c0000
+   error.fValue.reset(PyErr_GetRaisedException());
+#else
+   PyObject *pytype = nullptr;
+   PyObject *pyvalue = nullptr;
+   PyObject *pytrace = nullptr;
+   PyErr_Fetch(&pytype, &pyvalue, &pytrace);
+   error.fType.reset(pytype);
+   error.fValue.reset(pyvalue);
+   error.fTrace.reset(pytrace);
+#endif
+   return error;
+}
+
+
+//----------------------------------------------------------------------------
+void CPyCppyy::Utility::RestorePyError(CPyCppyy::Utility::PyError_t &error)
+{
+#if PY_VERSION_HEX >= 0x030c0000
+   PyErr_SetRaisedException(error.fValue.release());
+#else
+   PyErr_Restore(error.fType.release(), error.fValue.release(), error.fTrace.release());
+#endif
+}
+
+
+//----------------------------------------------------------------------------
 size_t CPyCppyy::Utility::FetchError(std::vector<PyError_t>& errors, bool is_cpp)
 {
 // Fetch the current python error, if any, and store it for future use.
     if (PyErr_Occurred()) {
-        PyError_t e{is_cpp};
-        PyErr_Fetch(&e.fType, &e.fValue, &e.fTrace);
-        errors.push_back(e);
+        errors.emplace_back(FetchPyError());
+        errors.back().fIsCpp = is_cpp;
     }
     return errors.size();
 }
 
 //----------------------------------------------------------------------------
-void CPyCppyy::Utility::SetDetailedException(std::vector<PyError_t>& errors, PyObject* topmsg, PyObject* defexc)
+void CPyCppyy::Utility::SetDetailedException(std::vector<PyError_t>&& errors, PyObject* topmsg, PyObject* defexc)
 {
 // Use the collected exceptions to build up a detailed error log.
     if (errors.empty()) {
@@ -1471,14 +1504,18 @@ void CPyCppyy::Utility::SetDetailedException(std::vector<PyError_t>& errors, PyO
 
     // bind the original C++ object, rather than constructing from topmsg, as it
     // is expected to have informative state
-        Py_INCREF(unique_from_cpp->fType); Py_INCREF(unique_from_cpp->fValue); Py_XINCREF(unique_from_cpp->fTrace);
-        PyErr_Restore(unique_from_cpp->fType, unique_from_cpp->fValue, unique_from_cpp->fTrace);
+        RestorePyError(*unique_from_cpp);
     } else {
     // try to consolidate Python exceptions, otherwise select default
         PyObject* exc_type = nullptr;
         for (auto& e : errors) {
-            if (!exc_type) exc_type = e.fType;
-            else if (exc_type != e.fType) {
+#if PY_VERSION_HEX >= 0x030c0000
+            PyObject* pytype = (PyObject*)Py_TYPE(e.fValue.get());
+#else
+            PyObject* pytype = e.fType.get();
+#endif
+            if (!exc_type) exc_type = pytype;
+            else if (exc_type != pytype) {
                 exc_type = defexc;
                 break;
             }
@@ -1487,14 +1524,15 @@ void CPyCppyy::Utility::SetDetailedException(std::vector<PyError_t>& errors, PyO
     // add the details to the topmsg
         PyObject* separator = CPyCppyy_PyText_FromString("\n  ");
         for (auto& e : errors) {
+            PyObject *pyvalue = e.fValue.get();
             CPyCppyy_PyText_Append(&topmsg, separator);
-            if (CPyCppyy_PyText_Check(e.fValue)) {
-                CPyCppyy_PyText_Append(&topmsg, e.fValue);
-            } else if (e.fValue) {
-                PyObject* excstr = PyObject_Str(e.fValue);
+            if (CPyCppyy_PyText_Check(pyvalue)) {
+                CPyCppyy_PyText_Append(&topmsg, pyvalue);
+            } else if (pyvalue) {
+                PyObject* excstr = PyObject_Str(pyvalue);
                 if (!excstr) {
                     PyErr_Clear();
-                    excstr = PyObject_Str((PyObject*)Py_TYPE(e.fValue));
+                    excstr = PyObject_Str((PyObject*)Py_TYPE(pyvalue));
                 }
                 CPyCppyy_PyText_AppendAndDel(&topmsg, excstr);
             } else {
@@ -1509,8 +1547,6 @@ void CPyCppyy::Utility::SetDetailedException(std::vector<PyError_t>& errors, PyO
         PyErr_SetString(exc_type, CPyCppyy_PyText_AsString(topmsg));
     }
 
-// cleanup stored errors and done with topmsg (whether used or not)
-    std::for_each(errors.begin(), errors.end(), PyError_t::Clear);
     Py_DECREF(topmsg);
 }
 

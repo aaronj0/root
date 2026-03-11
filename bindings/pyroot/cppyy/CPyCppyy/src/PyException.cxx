@@ -4,6 +4,7 @@
 // Bindings
 #include "CPyCppyy.h"
 #define CPYCPPYY_INTERNAL 1
+#include "CPyCppyy/DispatchPtr.h"
 #include "CPyCppyy/PyException.h"
 #undef CPYCPPYY_INTERNAL
 
@@ -25,11 +26,20 @@
 CPyCppyy::PyException::PyException()
 {
 #ifdef WITH_THREAD
-    PyGILState_STATE state = PyGILState_Ensure();
+    PythonGILRAII python_gil_raii;
 #endif
 
+#if PY_VERSION_HEX >= 0x030c0000
+    PyObject *pyvalue = PyErr_GetRaisedException();
+    PyObject *pytype = pyvalue ? (PyObject *)Py_TYPE(pyvalue) : nullptr;
+    PyObject* traceback = pyvalue ? PyException_GetTraceback(pyvalue) : nullptr;
+#else
     PyObject* pytype = nullptr, *pyvalue = nullptr, *pytrace = nullptr;
     PyErr_Fetch(&pytype, &pyvalue, &pytrace);
+    PyObject* traceback = pytrace; // to keep the original unchanged
+    Py_XINCREF(traceback);
+#endif
+
     if (pytype && pyvalue) {
         const char* tname = PyExceptionClass_Name(pytype);
         if (tname) {
@@ -45,9 +55,6 @@ CPyCppyy::PyException::PyException()
            Py_DECREF(msg);
         }
     }
-
-    PyObject* traceback = pytrace; // to keep the original unchanged
-    Py_XINCREF(traceback);
 
     std::string locName;
     std::string locFile;
@@ -88,7 +95,11 @@ CPyCppyy::PyException::PyException()
 
     Py_XDECREF(traceback);
 
+#if PY_VERSION_HEX >= 0x030c0000
+    PyErr_SetRaisedException(pyvalue);
+#else
     PyErr_Restore(pytype, pyvalue, pytrace);
+#endif
 
     if (fMsg.empty())
         fMsg = "python exception";
@@ -105,10 +116,6 @@ CPyCppyy::PyException::PyException()
 
         fMsg += ")";
     }
-
-#ifdef WITH_THREAD
-    PyGILState_Release(state);
-#endif
 }
 
 CPyCppyy::PyException::~PyException() noexcept
@@ -126,6 +133,9 @@ const char* CPyCppyy::PyException::what() const noexcept
 
 void CPyCppyy::PyException::clear() const noexcept
 {
+#ifdef WITH_THREAD
+    PythonGILRAII python_gil_raii;
+#endif
 // clear Python error, to allow full error handling C++ side
     PyErr_Clear();
 }

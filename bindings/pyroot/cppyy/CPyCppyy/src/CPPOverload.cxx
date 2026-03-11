@@ -291,7 +291,6 @@ static int mp_doc_set(CPPOverload* pymeth, PyObject *val, void *)
     return 0;
 }
 
-
 /**
  * @brief Returns a dictionary with the input parameter names for all overloads.
  *
@@ -769,9 +768,6 @@ static PyObject* mp_call(CPPOverload* pymeth, PyObject* args, PyObject* kwds)
                     }
                 }
 
-            // clear collected errors
-                if (!errors.empty())
-                    std::for_each(errors.begin(), errors.end(), Utility::PyError_t::Clear);
                 return HandleReturn(pymeth, im_self, result);
             }
 
@@ -815,7 +811,7 @@ static PyObject* mp_call(CPPOverload* pymeth, PyObject* args, PyObject* kwds)
 // first summarize, then add details
     PyObject* topmsg = CPyCppyy_PyText_FromFormat(
         "none of the %d overloaded methods succeeded. Full details:", (int)nMethods);
-    SetDetailedException(errors, topmsg /* steals */, PyExc_TypeError /* default error */);
+    SetDetailedException(std::move(errors), topmsg /* steals */, PyExc_TypeError /* default error */);
 
 // report failure
     return nullptr;

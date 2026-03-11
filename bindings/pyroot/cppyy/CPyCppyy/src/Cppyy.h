@@ -56,14 +56,14 @@ namespace Cpp = CppImpl;
 
 namespace Cppyy {
 
-    typedef void*       TCppScope_t;
+    typedef void* TCppScope_t;
     typedef TCppScope_t TCppType_t;
-    typedef void*       TCppEnum_t;
-    typedef void*       TCppObject_t;
-    typedef void*       TCppMethod_t;
+    typedef void* TCppEnum_t;
+    typedef void* TCppObject_t;
+    typedef void* TCppMethod_t;
 
-    typedef size_t      TCppIndex_t;
-    typedef void*       TCppFuncAddr_t;
+    typedef size_t TCppIndex_t;
+    typedef void* TCppFuncAddr_t;
 
 // direct interpreter access -------------------------------------------------
     CPPYY_IMPORT
@@ -126,8 +126,8 @@ namespace Cppyy {
     CPPYY_IMPORT
     bool IsPointerType(TCppType_t type);
 
-    // CPPYY_IMPORT
-    // TCppScope_t gGlobalScope;      // for fast access
+    CPPYY_IMPORT
+    TCppScope_t gGlobalScope;      // for fast access
 
 // memory management ---------------------------------------------------------
     CPPYY_IMPORT
@@ -326,6 +326,8 @@ namespace Cppyy {
     bool IsDestructor(TCppMethod_t method);
     CPPYY_IMPORT
     bool IsStaticMethod(TCppMethod_t method);
+    CPPYY_IMPORT
+    bool IsExplicit(TCppMethod_t method);
 
 // data member reflection information ----------------------------------------
     CPPYY_IMPORT
@@ -343,6 +345,10 @@ namespace Cppyy {
     TCppType_t  GetDatamemberType(TCppScope_t var);
     CPPYY_IMPORT
     std::string GetTypeAsString(TCppType_t type);
+    CPPYY_IMPORT
+    bool IsRValueReferenceType(TCppType_t type);
+    CPPYY_IMPORT
+    bool IsLValueReferenceType(TCppType_t type);
     CPPYY_IMPORT
     bool IsClassType(TCppType_t type);
     CPPYY_IMPORT

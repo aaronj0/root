@@ -16,6 +16,12 @@
 
 namespace CPyCppyy {
 
+static inline std::string targs2str(TemplateProxy* pytmpl)
+{
+    if (!pytmpl || !pytmpl->fTemplateArgs) return "";
+    return CPyCppyy_PyText_AsString(pytmpl->fTemplateArgs);
+}
+
 //----------------------------------------------------------------------------
 TemplateInfo::TemplateInfo() : fPyClass(nullptr), fNonTemplated(nullptr),
     fTemplated(nullptr), fLowPriority(nullptr), fDoc(nullptr)
@@ -93,8 +99,14 @@ PyObject* TemplateProxy::Instantiate(const std::string& fname,
             bool bArgSet = false;
 
         // special case for arrays
-            PyObject* pytc = PyObject_GetAttr(itemi, PyStrings::gTypeCode);
-            if (pytc) {
+            if (TemplateProxy_CheckExact(itemi)) {
+                TemplateProxy *tn = (TemplateProxy*)itemi;
+                PyObject *f = PyUnicode_FromFormat("%s%s", tn->fTI->fCppName.c_str(), targs2str(tn).c_str());
+                PyTuple_SET_ITEM(tpArgs, i, f);
+                bArgSet = true;
+            }
+            PyObject* pytc;
+            if (!bArgSet && (pytc = PyObject_GetAttr(itemi, PyStrings::gTypeCode))) {
                 Py_buffer bufinfo;
                 memset(&bufinfo, 0, sizeof(Py_buffer));
                 std::string ptrdef;
@@ -424,15 +436,8 @@ static int tpp_doc_set(TemplateProxy* pytmpl, PyObject *val, void *)
 //= CPyCppyy template proxy callable behavior ================================
 
 #define TPPCALL_RETURN                                                       \
-{ if (!errors.empty())                                                       \
-      std::for_each(errors.begin(), errors.end(), Utility::PyError_t::Clear);\
+{ errors.clear();                                                            \
   return result; }
-
-static inline std::string targs2str(TemplateProxy* pytmpl)
-{
-    if (!pytmpl || !pytmpl->fTemplateArgs) return "";
-    return CPyCppyy_PyText_AsString(pytmpl->fTemplateArgs);
-}
 
 static inline void UpdateDispatchMap(TemplateProxy* pytmpl, bool use_targs, uint64_t sighash, CPPOverload* pymeth)
 {
@@ -597,7 +602,7 @@ static PyObject* tpp_call(TemplateProxy* pytmpl, PyObject* args, PyObject* kwds)
     // attempt call if found (this may fail if there are specializations)
         if (CPPOverload_Check(pymeth)) {
         // since the template args are fully explicit, allow implicit conversion of arguments
-            result = CallMethodImp(pytmpl, pymeth, args, nargsf, kwds, true, sighash);
+            result = CallMethodImp(pytmpl, pymeth, args, nargsf, kwds, /*impOK=*/true, sighash);
             if (result) {
                 Py_DECREF(pyfullname);
                 TPPCALL_RETURN;
@@ -620,7 +625,7 @@ static PyObject* tpp_call(TemplateProxy* pytmpl, PyObject* args, PyObject* kwds)
             CPyCppyy_PyText_AsString(pyfullname), args, nargsf, Utility::kNone);
         if (pymeth) {
         // attempt actual call; same as above, allow implicit conversion of arguments
-            result = CallMethodImp(pytmpl, pymeth, args, nargsf, kwds, true, sighash);
+            result = CallMethodImp(pytmpl, pymeth, args, nargsf, kwds, /*impOK=*/true, sighash);
             if (result) {
                 Py_DECREF(pyfullname);
                 TPPCALL_RETURN;
@@ -632,7 +637,7 @@ static PyObject* tpp_call(TemplateProxy* pytmpl, PyObject* args, PyObject* kwds)
         PyObject* topmsg = CPyCppyy_PyText_FromFormat(
             "Could not find \"%s\" (set cppyy.set_debug() for C++ errors):", CPyCppyy_PyText_AsString(pyfullname));
         Py_DECREF(pyfullname);
-        Utility::SetDetailedException(errors, topmsg /* steals */, PyExc_TypeError /* default error */);
+        Utility::SetDetailedException(std::move(errors), topmsg /* steals */, PyExc_TypeError /* default error */);
 
         return nullptr;
     }
@@ -657,7 +662,7 @@ static PyObject* tpp_call(TemplateProxy* pytmpl, PyObject* args, PyObject* kwds)
         pymeth = pytmpl->Instantiate(pytmpl->fTI->fCppName, args, nargsf, pref, &pcnt);
         if (pymeth) {
         // attempt actual call; even if argument based, allow implicit conversions, for example for non-template arguments
-            result = CallMethodImp(pytmpl, pymeth, args, nargsf, kwds, true, sighash);
+            result = CallMethodImp(pytmpl, pymeth, args, nargsf, kwds, /*impOK=*/true, sighash);
             if (result) TPPCALL_RETURN;
         }
         Utility::FetchError(errors);
@@ -673,7 +678,7 @@ static PyObject* tpp_call(TemplateProxy* pytmpl, PyObject* args, PyObject* kwds)
 // error reporting is fraud, given the numerous steps taken, but more details seems better
     if (!errors.empty()) {
         PyObject* topmsg = CPyCppyy_PyText_FromString("Template method resolution failed:");
-        Utility::SetDetailedException(errors, topmsg /* steals */, PyExc_TypeError /* default error */);
+        Utility::SetDetailedException(std::move(errors), topmsg /* steals */, PyExc_TypeError /* default error */);
     } else {
         PyErr_Format(PyExc_TypeError, "cannot resolve method template call for \'%s\'",
             pytmpl->fTI->fCppName.c_str());
@@ -850,17 +855,11 @@ static PyObject* tpp_overload(TemplateProxy* pytmpl, PyObject* args)
     }
 
 // else attempt instantiation
-    PyObject* pytype = 0, *pyvalue = 0, *pytrace = 0;
-    PyErr_Fetch(&pytype, &pyvalue, &pytrace);
-
     if (!cppmeth) {
-        PyErr_Restore(pytype, pyvalue, pytrace);
         return nullptr;
     }
 
-    Py_XDECREF(pytype);
-    Py_XDECREF(pyvalue);
-    Py_XDECREF(pytrace);
+    PyErr_Clear();
 
     // TODO: the next step should be consolidated with Instantiate()
     PyCallable* meth = nullptr;

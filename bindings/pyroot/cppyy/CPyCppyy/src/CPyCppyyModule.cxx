@@ -224,23 +224,13 @@ static PyTypeObject PyDefault_t_Type = {
 
 namespace {
 
-PyObject _CPyCppyy_NullPtrStruct = {_PyObject_EXTRA_INIT
-// In 3.12.0-beta this field was changed from a ssize_t to a union
-#if PY_VERSION_HEX >= 0x30c00b1
-                                    {1},
-#else
-                                    1,
-#endif
-                                    &PyNullPtr_t_Type};
+struct {
+   PyObject_HEAD
+} _CPyCppyy_NullPtrStruct{PyObject_HEAD_INIT(&PyNullPtr_t_Type)};
 
-PyObject _CPyCppyy_DefaultStruct = {_PyObject_EXTRA_INIT
-// In 3.12.0-beta this field was changed from a ssize_t to a union
-#if PY_VERSION_HEX >= 0x30c00b1
-                                    {1},
-#else
-                                    1,
-#endif
-                                    &PyDefault_t_Type};
+struct {
+   PyObject_HEAD
+} _CPyCppyy_DefaultStruct{PyObject_HEAD_INIT(&PyDefault_t_Type)};
 
 // TODO: refactor with Converters.cxx
 struct CPyCppyy_tagCDataObject {       // non-public (but stable)
@@ -585,6 +575,12 @@ static PyObject* addressof(PyObject* /* dummy */, PyObject* args, PyObject* kwds
             return PyLong_FromLongLong((intptr_t)caddr);
         }
 
+    // LowLevelViews
+    if (LowLevelView_CheckExact(arg0)) {
+        auto *llv = (LowLevelView*)arg0;
+        return PyLong_FromLongLong((intptr_t)llv->get_buf());
+    }
+
     // final attempt: any type of buffer
         Utility::GetBuffer(arg0, '*', 1, addr, false);
         if (addr) return PyLong_FromLongLong((intptr_t)addr);
@@ -807,7 +803,7 @@ static PyObject* BindObject(PyObject*, PyObject* args, PyObject* kwds)
 
 // not a pre-existing object; get the address and bind
     void* addr = nullptr;
-    if (arg0 != &_CPyCppyy_NullPtrStruct) {
+    if (arg0 != gNullPtrObject) {
         addr = CPyCppyy_PyCapsule_GetPointer(arg0, nullptr);
         if (PyErr_Occurred()) {
             PyErr_Clear();
@@ -1081,10 +1077,10 @@ static struct PyModuleDef moduledef = {
     cpycppyymodule_clear,
     nullptr
 };
+
+
 #endif
 
-
-#define CPYCPPYY_INIT_ERROR return nullptr
 namespace CPyCppyy {
 
 //----------------------------------------------------------------------------
@@ -1123,7 +1119,7 @@ PyObject* Init()
     gThisModule = Py_InitModule(const_cast<char*>("libcppyy"), gCPyCppyyMethods);
 #endif
     if (!gThisModule)
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
 // keep gThisModule, but do not increase its reference count even as it is borrowed,
 // or a self-referencing cycle would be created
@@ -1137,58 +1133,58 @@ PyObject* Init()
 
 // inject meta type
     if (!Utility::InitProxy(gThisModule, &CPPScope_Type, "CPPScope"))
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
 // inject object proxy type
     if (!Utility::InitProxy(gThisModule, &CPPInstance_Type, "CPPInstance"))
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
 // inject exception object proxy type
     if (!Utility::InitProxy(gThisModule, &CPPExcInstance_Type, "CPPExcInstance"))
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
 // inject method proxy type
     if (!Utility::InitProxy(gThisModule, &CPPOverload_Type, "CPPOverload"))
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
 // inject template proxy type
     if (!Utility::InitProxy(gThisModule, &TemplateProxy_Type, "TemplateProxy"))
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
 // inject property proxy type
     if (!Utility::InitProxy(gThisModule, &CPPDataMember_Type, "CPPDataMember"))
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
 // inject custom data types
 #if PY_VERSION_HEX < 0x03000000
     if (!Utility::InitProxy(gThisModule, &RefFloat_Type, "Double"))
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
     if (!Utility::InitProxy(gThisModule, &RefInt_Type, "Long"))
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 #endif
 
     if (!Utility::InitProxy(gThisModule, &CustomInstanceMethod_Type, "InstanceMethod"))
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
     if (!Utility::InitProxy(gThisModule, &TupleOfInstances_Type, "InstanceArray"))
-       CPYCPPYY_INIT_ERROR;
+       return nullptr;
 
     if (!Utility::InitProxy(gThisModule, &LowLevelView_Type, "LowLevelView"))
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
     if (!Utility::InitProxy(gThisModule, &PyNullPtr_t_Type, "nullptr_t"))
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
 // custom iterators
     if (PyType_Ready(&InstanceArrayIter_Type) < 0)
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
     if (PyType_Ready(&IndexIter_Type) < 0)
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
     if (PyType_Ready(&VectorIter_Type) < 0)
-        CPYCPPYY_INIT_ERROR;
+        return nullptr;
 
 // inject identifiable nullptr and default
     gNullPtrObject = (PyObject*)&_CPyCppyy_NullPtrStruct;
@@ -1223,10 +1219,8 @@ PyObject* Init()
 // create the memory regulator
     static MemoryRegulator s_memory_regulator;
 
-#if PY_VERSION_HEX >= 0x03000000
     Py_INCREF(gThisModule);
     return gThisModule;
-#endif
 }
 
 } // namespace CPyCppyy

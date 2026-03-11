@@ -651,8 +651,14 @@ static PyObject* vector_iter(PyObject* v) {
 
 // tell the iterator code to set a life line if this container is a temporary
     vi->vi_flags = vectoriterobject::kDefault;
-    if (v->ob_refcnt <= 2 || (((CPPInstance*)v)->fFlags & CPPInstance::kIsValue))
+#if PY_VERSION_HEX >= 0x030e0000
+    if (PyUnstable_Object_IsUniqueReferencedTemporary(v) || (((CPPInstance*)v)->fFlags & CPPInstance::kIsValue))
+#else
+    if (Py_REFCNT(v) <= 1 || (((CPPInstance*)v)->fFlags & CPPInstance::kIsValue))
+#endif
         vi->vi_flags = vectoriterobject::kNeedLifeLine;
+
+    Py_INCREF(v);
 
     PyObject* pyvalue_type = PyObject_GetAttr((PyObject*)Py_TYPE(v), PyStrings::gValueTypePtr);
     if (pyvalue_type) {
@@ -1223,15 +1229,15 @@ static int PyObject_Compare(PyObject* one, PyObject* other) {
 }
 #endif
 static inline
-PyObject* CPyCppyy_PyString_FromCppString(std::string* s, bool native=true) {
+PyObject* CPyCppyy_PyString_FromCppString(std::string_view s, bool native=true) {
     if (native)
-        return PyBytes_FromStringAndSize(s->data(), s->size());
-    return CPyCppyy_PyText_FromStringAndSize(s->data(), s->size());
+        return PyBytes_FromStringAndSize(s.data(), s.size());
+    return CPyCppyy_PyText_FromStringAndSize(s.data(), s.size());
 }
 
 static inline
-PyObject* CPyCppyy_PyString_FromCppString(std::wstring* s, bool native=true) {
-    PyObject* pyobj = PyUnicode_FromWideChar(s->data(), s->size());
+PyObject* CPyCppyy_PyString_FromCppString(std::wstring_view s, bool native=true) {
+    PyObject* pyobj = PyUnicode_FromWideChar(s.data(), s.size());
     if (pyobj && native) {
         PyObject* pybytes = PyUnicode_AsEncodedString(pyobj, "UTF-8", "strict");
         Py_DECREF(pyobj);
@@ -1246,7 +1252,7 @@ PyObject* name##StringGetData(PyObject* self, bool native=true)              \
 {                                                                            \
     if (CPyCppyy::CPPInstance_Check(self)) {                                 \
         type* obj = ((type*)((CPPInstance*)self)->GetObject());              \
-        if (obj) return CPyCppyy_PyString_FromCppString(obj, native);        \
+        if (obj) return CPyCppyy_PyString_FromCppString(*obj, native);        \
     }                                                                        \
     PyErr_Format(PyExc_TypeError, "object mismatch (%s expected)", #type);   \
     return nullptr;                                                          \
@@ -1323,6 +1329,7 @@ PyObject* name##StringCompare(PyObject* self, PyObject* obj)                 \
 
 CPPYY_IMPL_STRING_PYTHONIZATION_CMP(std::string, STL)
 CPPYY_IMPL_STRING_PYTHONIZATION_CMP(std::wstring, STLW)
+CPPYY_IMPL_STRING_PYTHONIZATION_CMP(std::string_view, STLView)
 
 static inline std::string* GetSTLString(CPPInstance* self) {
     if (!CPPInstance_Check(self)) {
@@ -2003,7 +2010,6 @@ bool CPyCppyy::Pythonize(PyObject* pyclass, Cppyy::TCppScope_t scope)
     // constructor that takes python associative collections
         Utility::AddToClass(pyclass, "__real_init", "__init__");
         Utility::AddToClass(pyclass, "__init__", (PyCFunction)SetInit, METH_VARARGS | METH_KEYWORDS);
-
 #if __cplusplus <= 202002L
     // From C++20, std::set already implements a contains() method.
         Utility::AddToClass(pyclass, "__contains__", (PyCFunction)STLContainsWithFind, METH_O);
@@ -2036,7 +2042,7 @@ bool CPyCppyy::Pythonize(PyObject* pyclass, Cppyy::TCppScope_t scope)
         Utility::AddToClass(pyclass, "__eq__",        (PyCFunction)STLStringIsEqual,    METH_O);
         Utility::AddToClass(pyclass, "__ne__",        (PyCFunction)STLStringIsNotEqual, METH_O);
 #if __cplusplus <= 202302L
-    // From C++23, std::sting already implements a contains() method.
+    // From C++23, std::string already implements a contains() method.
         Utility::AddToClass(pyclass, "__contains__",  (PyCFunction)STLStringContains,   METH_O);
 #endif
         Utility::AddToClass(pyclass, "decode",        (PyCFunction)STLStringDecode,     METH_VARARGS | METH_KEYWORDS);
@@ -2054,7 +2060,13 @@ bool CPyCppyy::Pythonize(PyObject* pyclass, Cppyy::TCppScope_t scope)
 
     else if (name == "std::basic_string_view<char>") {
         Utility::AddToClass(pyclass, "__real_init", "__init__");
-        Utility::AddToClass(pyclass, "__init__", (PyCFunction)StringViewInit, METH_VARARGS | METH_KEYWORDS);
+        Utility::AddToClass(pyclass, "__init__",  (PyCFunction)StringViewInit, METH_VARARGS | METH_KEYWORDS);
+        Utility::AddToClass(pyclass, "__bytes__", (PyCFunction)STLViewStringBytes,      METH_NOARGS);
+        Utility::AddToClass(pyclass, "__cmp__",   (PyCFunction)STLViewStringCompare,    METH_O);
+        Utility::AddToClass(pyclass, "__eq__",    (PyCFunction)STLViewStringIsEqual,    METH_O);
+        Utility::AddToClass(pyclass, "__ne__",    (PyCFunction)STLViewStringIsNotEqual, METH_O);
+        Utility::AddToClass(pyclass, "__repr__",  (PyCFunction)STLViewStringRepr,       METH_NOARGS);
+        Utility::AddToClass(pyclass, "__str__",   (PyCFunction)STLViewStringStr,        METH_NOARGS);
     }
 
 // The first condition was already present in upstream CPyCppyy. The other two
