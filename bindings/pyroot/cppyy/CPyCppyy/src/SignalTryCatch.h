@@ -40,9 +40,6 @@ using CppyyExceptionContext_t = CppyyLegacy::ExceptionContext_t;
 using CppyyExceptionContext_t = ExceptionContext_t;
 #endif
 
-// FIXME: This is a dummy, replace with cling equivalent of gException
-static CppyyExceptionContext_t DummyException;
-static CppyyExceptionContext_t *gException = &DummyException;
 
 #ifdef NEED_SIGJMP
 # define CLING_EXCEPTION_SETJMP(buf) sigsetjmp(buf,1)
