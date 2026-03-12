@@ -927,6 +927,8 @@ int64_t GetBaseClassOffset(TCppScope_t derived, TCppScope_t base) {
 
   assert(derived || base);
 
+  compat::SynthesizingCodeRAII RAII(&getInterp());
+
   auto* DD = (Decl*)derived;
   auto* BD = (Decl*)base;
   if (!isa<CXXRecordDecl>(DD) || !isa<CXXRecordDecl>(BD))
@@ -1053,8 +1055,13 @@ std::vector<TCppFunction_t> GetFunctionsUsingName(TCppScope_t scope,
   DeclarationName DName = &getASTContext().Idents.get(name);
   clang::LookupResult R(S, DName, SourceLocation(), Sema::LookupOrdinaryName,
                         For_Visible_Redeclaration);
-
-  CppInternal::utils::Lookup::Named(&S, R, Decl::castToDeclContext(D));
+  auto* Within = Decl::castToDeclContext(D);
+  #ifdef CPPINTEROP_USE_CLING
+  if (Within)
+    Within->getPrimaryContext()->buildLookup();
+  #endif
+  compat::SynthesizingCodeRAII RAII(&getInterp());
+  CppInternal::utils::Lookup::Named(&S, R, Within);
 
   if (R.empty())
     return funcs;
@@ -1198,6 +1205,11 @@ bool ExistsFunctionTemplate(const std::string& name, TCppScope_t parent) {
     Within = llvm::dyn_cast<DeclContext>(D);
   }
 
+#ifdef CPPINTEROP_USE_CLING
+  if (Within)
+    Within->getPrimaryContext()->buildLookup();
+#endif
+  compat::SynthesizingCodeRAII RAII(&getInterp());
   auto* ND = CppInternal::utils::Lookup::Named(&getSema(), name, Within);
 
   if ((intptr_t)ND == (intptr_t)0)
@@ -1243,6 +1255,11 @@ bool GetClassTemplatedMethods(const std::string& name, TCppScope_t parent,
   clang::LookupResult R(S, DName, SourceLocation(), Sema::LookupOrdinaryName,
                         For_Visible_Redeclaration);
   auto* DC = clang::Decl::castToDeclContext(D);
+#ifdef CPPINTEROP_USE_CLING
+  if (DC)
+    DC->getPrimaryContext()->buildLookup();
+#endif
+  compat::SynthesizingCodeRAII RAII(&getInterp());
   CppInternal::utils::Lookup::Named(&S, R, DC);
 
   if (R.getResultKind() == clang_LookupResult_Not_Found && funcs.empty())
@@ -1556,6 +1573,11 @@ TCppScope_t LookupDatamember(const std::string& name, TCppScope_t parent) {
     Within = llvm::dyn_cast<clang::DeclContext>(D);
   }
 
+#ifdef CPPINTEROP_USE_CLING
+  if (Within)
+    Within->getPrimaryContext()->buildLookup();
+#endif
+  compat::SynthesizingCodeRAII RAII(&getInterp());
   auto* ND = CppInternal::utils::Lookup::Named(&getSema(), name, Within);
   if (ND && ND != (clang::NamedDecl*)-1) {
     if (llvm::isa_and_nonnull<clang::FieldDecl>(ND)) {
@@ -1602,6 +1624,7 @@ intptr_t GetVariableOffset(compat::Interpreter& I, Decl* D,
     return 0;
 
   auto& C = I.getSema().getASTContext();
+  compat::SynthesizingCodeRAII RAII(&getInterp());
 
   if (auto* FD = llvm::dyn_cast<FieldDecl>(D)) {
     clang::RecordDecl* FieldParentRecordDecl = FD->getParent();
