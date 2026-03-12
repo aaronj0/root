@@ -21,18 +21,18 @@
 #error "To use the Dispatch mechanism, do not include CppInterOp.h directly."
 #endif
 
-#include <CppInterOp/CppInterOp.h>
-
-#include <cstdlib>
-#include <iostream>
-#include <mutex>
-
 #ifdef _WIN32
 #include <windows.h>
 #undef LoadLibrary
 #else
 #include <dlfcn.h>
 #endif
+
+#include <CppInterOp/CppInterOp.h>
+
+#include <cstdlib>
+#include <iostream>
+#include <mutex>
 
 using CppFnPtrTy = void (*)();
 ///\param[in] procname - the name of the FunctionEntry in the symbol lookup
