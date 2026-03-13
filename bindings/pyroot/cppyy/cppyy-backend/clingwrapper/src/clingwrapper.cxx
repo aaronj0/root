@@ -1661,8 +1661,8 @@ std::string Cppyy::GetMethodArgName(TCppMethod_t method, TCppIndex_t iarg)
 {
     if (!method)
         return "<unknown>";
-    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
 
+    std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
     return Cpp::GetFunctionArgName(method, iarg);
 }
 
@@ -1675,7 +1675,7 @@ Cppyy::TCppType_t Cppyy::GetMethodArgType(TCppMethod_t method, TCppIndex_t iarg)
 std::string Cppyy::GetMethodArgTypeAsString(TCppMethod_t method, TCppIndex_t iarg)
 {
     std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
-  return Cpp::GetTypeAsString(Cpp::RemoveTypeQualifier(
+    return Cpp::GetTypeAsString(Cpp::RemoveTypeQualifier(
       Cpp::GetFunctionArgType(method, iarg), Cpp::QualKind::Const));
 }
 
@@ -1826,6 +1826,7 @@ Cppyy::TCppMethod_t Cppyy::GetMethodTemplate(
     }
 
     std::lock_guard<std::recursive_mutex> Lock(InterOpMutex);
+
     std::vector<Cppyy::TCppMethod_t> unresolved_candidate_methods;
     Cpp::GetClassTemplatedMethods(pureName, scope, unresolved_candidate_methods);
     if (unresolved_candidate_methods.empty() && name.find("operator") == 0) {
@@ -1838,7 +1839,6 @@ Cppyy::TCppMethod_t Cppyy::GetMethodTemplate(
     std::vector<Cpp::TemplateArgInfo> templ_params;
     Cppyy::AppendTypesSlow(proto, arg_types, scope);
     Cppyy::AppendTypesSlow(explicit_params, templ_params, scope);
-
     Cppyy::TCppMethod_t cppmeth = nullptr;
     cppmeth = Cpp::BestOverloadFunctionMatch(
         unresolved_candidate_methods, templ_params, arg_types);
