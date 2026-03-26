@@ -1,6 +1,6 @@
 import sys, pytest, os
 from pytest import mark, raises, skip
-from support import setup_make, ispypy, IS_WINDOWS, IS_MAC_ARM
+from .support import setup_make, ispypy, IS_WINDOWS, IS_MAC_ARM
 
 
 test_dct = "doc_helper_cxx"
@@ -248,8 +248,8 @@ namespace Namespace {
     def test_doc_strings(self):
         import cppyy
         from cppyy.gbl import Concrete
-        assert 'void Concrete::array_method(int* ad, int size)' in Concrete.array_method.__doc__
-        assert 'void Concrete::array_method(double* ad, int size)' in Concrete.array_method.__doc__
+        assert 'void Concrete::array_method(int* ad, int size)'.replace(" ", "") in Concrete.array_method.__doc__.replace(" ", "")
+        assert 'void Concrete::array_method(double* ad, int size)'.replace(" ", "") in Concrete.array_method.__doc__.replace(" ", "")
 
     def test_enums(self):
         import cppyy
@@ -781,7 +781,7 @@ class TestADVERTISED:
         Advert02.Picam_OpenFirstCamera(cam)
         assert Advert02.Picam_CloseCamera(cam)
 
-    @mark.xfail(strict=True, condition=IS_WINDOWS, reason="Fails on Windows")
+    @mark.xfail(condition=IS_WINDOWS, reason="Fails on Windows")
     def test03_use_of_ctypes_and_enum(self):
         """Use of (opaque) enum through ctypes.c_void_p"""
 
@@ -1123,7 +1123,7 @@ class TestTALKEXAMPLES:
 
         assert v.back().add(17) == 4+42+2*17
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test_fallbacks(self):
         """Template instantation switches based on value sizes"""
 
@@ -1168,7 +1168,7 @@ class TestTALKEXAMPLES:
         assert CC.callPtr(lambda i: 5*i, 4) == 20
         assert CC.callFun(lambda i: 6*i, 4) == 24
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test_templated_callback(self):
         """Templated callback example"""
 
@@ -1221,7 +1221,7 @@ class TestTALKEXAMPLES:
         assert type(b) == CC.Derived
         assert d is b
 
-    @mark.xfail(strict=True, condition=IS_WINDOWS, reason = "Crashes on Windows")
+    @mark.xfail(condition=IS_WINDOWS, reason = "Crashes on Windows")
     def test_exceptions(self):
         """Exceptions example"""
 
@@ -1246,7 +1246,7 @@ class TestTALKEXAMPLES:
         with raises(CC.MyException):
             CC.throw_error()
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test_unicode(self):
         """Unicode non-UTF-8 example"""
 

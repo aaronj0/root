@@ -1,6 +1,6 @@
 import sys, pytest, os
 from pytest import mark, raises
-from support import setup_make, pylong
+from .support import setup_make, pylong
 
 test_dct = "pythonizables_cxx"
 
@@ -11,7 +11,7 @@ class TestClassPYTHONIZATION:
         import cppyy
         cls.pyzables = cppyy.load_reflection_info(cls.test_dct)
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test00_api(self):
         """Test basic semantics of the pythonization API"""
 

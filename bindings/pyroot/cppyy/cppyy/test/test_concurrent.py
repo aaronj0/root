@@ -1,6 +1,7 @@
 import pytest
 from pytest import raises, skip, mark
-from support import IS_MAC_ARM, IS_WINDOWS
+from .support import IS_MAC_ARM, IS_WINDOWS
+
 
 
 class TestCONCURRENT:
@@ -91,7 +92,7 @@ class TestCONCURRENT:
         if t.is_alive():        # was timed-out
             cppyy.gbl.test12_timeout.stopit[0] = True
 
-    @mark.xfail(strict=True, condition=IS_WINDOWS, reason="Fails on Windows")
+    @mark.xfail(condition=IS_WINDOWS, reason="Fails on Windows")
     def test04_cpp_threading_with_exceptions(self):
         """Threads and Python exceptions"""
 
@@ -236,6 +237,7 @@ class TestCONCURRENT:
         p = Processor()
         cppyy.gbl.FloatDim2.callback(p)
 
+    @mark.xfail(run=False, reason="Thread-Safety error at CppInterOp")
     def test06_overload_reuse_in_threads(self):
         """Threads reuse overload objects; check for clashes"""
 

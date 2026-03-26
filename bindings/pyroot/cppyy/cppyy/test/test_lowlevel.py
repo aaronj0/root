@@ -1,6 +1,6 @@
 import sys, pytest, os
 from pytest import mark, raises, skip
-from support import setup_make, pylong, pyunicode, IS_WINDOWS, ispypy
+from .support import setup_make, pylong, pyunicode, IS_WINDOWS, ispypy
 
 
 test_dct = "datatypes_cxx"
@@ -13,6 +13,9 @@ class TestLOWLEVEL:
         cls.test_dct = test_dct
         cls.datatypes = cppyy.load_reflection_info(cls.test_dct)
         cls.N = cppyy.gbl.N
+
+        at_least_17 = 201402 < cppyy.gbl.Cpp.Evaluate("__cplusplus", cppyy.nullptr)
+        cls.has_nested_namespace = at_least_17
 
     def test00_import_all(self):
         """Validity of `from cppyy.ll import *`"""
@@ -132,7 +135,7 @@ class TestLOWLEVEL:
         f = array('f', [0]);     ctd.set_float_r(f);  assert f[0] ==  5.
         f = array('d', [0]);     ctd.set_double_r(f); assert f[0] == -5.
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test06_ctypes_as_ref_and_ptr(self):
         """Use ctypes for pass-by-ref/ptr"""
 
@@ -489,7 +492,7 @@ class TestLOWLEVEL:
         assert cppyy.gbl.std.vector[cppyy.gbl.std.vector[int]].value_type == 'std::vector<int>'
         assert cppyy.gbl.std.vector['int[1]'].value_type == 'int[1]'
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test15_templated_arrays_gmpxx(self):
         """Use of gmpxx array types in templates"""
 

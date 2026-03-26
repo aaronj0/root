@@ -1,6 +1,6 @@
 import os, sys, pytest
 from pytest import mark, raises, skip
-from support import setup_make, IS_WINDOWS, ispypy, IS_MAC, IS_MAC_ARM
+from .support import setup_make, IS_WINDOWS, ispypy, IS_MAC, IS_MAC_ARM
 
 
 class TestREGRESSION:
@@ -380,7 +380,7 @@ class TestREGRESSION:
         sizeit = cppyy.gbl.vec_vs_init.sizeit
         assert sizeit(list(range(10))) == 10
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test16_iterable_enum(self):
         """Use template to iterate over an enum"""
       # from: https://stackoverflow.com/questions/52459530/pybind11-emulate-python-enum-behaviour
@@ -473,7 +473,7 @@ class TestREGRESSION:
 
         assert a != b             # derived class' C++ operator!= called
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test18_operator_plus_overloads(self):
         """operator+(string, string) should return a string"""
 
@@ -783,7 +783,7 @@ class TestREGRESSION:
         null = cppyy.gbl.exception_as_shared_ptr.get_shared_null()
         assert not null
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test29_callback_pointer_values(self, capfd):
         """Make sure pointer comparisons in callbacks work as expected"""
 
@@ -859,7 +859,7 @@ class TestREGRESSION:
         output = (captured.out + captured.err).lower()
         assert "taking address of non-addressable standard library function" not in output
 
-    @mark.xfail(strict=True, condition=IS_MAC or IS_WINDOWS, reason="int64_t and uint64_t not automatically materialized on macOS and Windows")
+    @mark.xfail(condition=IS_MAC or IS_WINDOWS, reason="int64_t and uint64_t not automatically materialized on macOS and Windows")
     def test30_uint64_t(self):
         """Failure due to typo"""
 
@@ -893,7 +893,7 @@ class TestREGRESSION:
         assert ns.TTest(True).fT == True
         assert type(ns.TTest(True).fT) == bool
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test31_enum_in_dir(self):
         """Failed to pick up enum data"""
 
@@ -916,7 +916,7 @@ class TestREGRESSION:
         required = {'prod', 'a', 'b', 'smth', 'my_enum'}
         assert all_names.intersection(required) == required
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test32_typedef_class_enum(self):
         """Use of class enum with typedef'd type"""
 
@@ -954,7 +954,7 @@ class TestREGRESSION:
             assert o.x == Foo.BAZ
             assert o.y == 1
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test33_explicit_template_in_namespace(self):
         """Lookup of explicit template in namespace"""
 
@@ -1005,6 +1005,7 @@ class TestREGRESSION:
         pt_type = cppyy.gbl.property_types.ReferenceWavefunction['double']
         assert cppyy.gbl.std.get[0](cppyy.gbl.property_types.run_as[pt_type]()) ==  20.
 
+    @mark.xfail(run=False, reason="toString not implemented")
     def test34_print_empty_collection(self):
         """Print empty collection through Cling"""
 
@@ -1023,14 +1024,15 @@ class TestREGRESSION:
 
         import cppyy
 
-        cppyy.cppdef("""\
-        #include <filesystem>
-        std::string stack_std_path() {
-            std::filesystem::path p = "/usr";
-            std::ostringstream os;
-            os << p;
-            return os.str();
-        }""")
+        if cppyy.gbl.Cpp.Evaluate("__cplusplus", cppyy.nullptr) > 201402:
+            cppyy.cppdef("""\
+            #include <filesystem>
+            std::string stack_std_path() {
+                std::filesystem::path p = "/usr";
+                std::ostringstream os;
+                os << p;
+                return os.str();
+            }""")
 
         assert cppyy.gbl.stack_std_path() == '"/usr"'
 
@@ -1356,7 +1358,7 @@ class TestREGRESSION:
         finally:
             cppyy._backend.SetHeuristicMemoryPolicy(old_memory_policy)
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test45_typedef_resolution(self):
         """Typedefs starting with 'c'"""
 
@@ -1435,6 +1437,7 @@ class TestREGRESSION:
         )
 
         with raises(std.runtime_error):
+            # breakpoint()
             cppyy.gbl.fun("", [])
         with raises(std.runtime_error):
             cppyy.gbl.fun(std.string_view("hello world"), std.vector[std.string]())

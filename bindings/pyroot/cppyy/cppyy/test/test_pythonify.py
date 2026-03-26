@@ -1,6 +1,6 @@
-import pytest, os
-from pytest import mark, raises, skip
-from support import setup_make, pylong, ispypy
+import py, pytest, os
+from pytest import raises, skip, mark
+from .support import setup_make, pylong, ispypy
 
 
 test_dct = "example01_cxx"

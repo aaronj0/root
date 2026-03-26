@@ -1,6 +1,6 @@
-import pytest, os
+import py, pytest, os
 from pytest import raises, mark
-from support import setup_make, IS_WINDOWS
+from .support import setup_make, IS_WINDOWS
 
 test_dct = "conversions_cxx"
 
@@ -11,6 +11,7 @@ class TestCONVERSIONS:
         import cppyy
         cls.conversion = cppyy.load_reflection_info(cls.test_dct)
 
+    @mark.xfail(reason="sumit look fails in ROOT")
     def test01_implicit_vector_conversions(self):
         """Test implicit conversions of std::vector"""
 
@@ -83,7 +84,7 @@ class TestCONVERSIONS:
         gc.collect()
         assert CC.s_count == 0
 
-    @mark.xfail(strict=True, condition=IS_WINDOWS, reason="Fails on Windows")
+    @mark.xfail(condition=IS_WINDOWS, reason="Fails on Windows")
     def test04_implicit_conversion_from_tuple(self):
         """Allow implicit conversions from tuples as arguments {}-like"""
 

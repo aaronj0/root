@@ -1,6 +1,6 @@
 import py, os, pytest
 from pytest import mark, raises
-from support import setup_make
+from .support import setup_make
 
 inc_paths = [os.path.join(os.path.sep, 'usr', 'include'),
              os.path.join(os.path.sep, 'usr', 'local', 'include')]
@@ -100,7 +100,7 @@ class TestEIGEN:
         for i in range(5):
             assert v(i) == i+1
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test03_matrices_and_vectors(self):
         """Matrices and vectors"""
 

@@ -205,21 +205,12 @@ nullptr       = _backend.nullptr
 default       = _backend.default
 
 def load_reflection_info(name):
-#    with _stderr_capture() as err:
-    #FIXME: Remove the .so and add logic in libcppinterop
-    name = name + ".so"
-    result = gbl.Cpp.LoadLibrary(name, True)
-    if name.endswith("Dict.so"):
-        header = name[:-7] + ".h"
-        gbl.Cpp.Declare('#include "' + header +'"', False)
-
-    if result == False:
-        raise RuntimeError('Could not load library "%s"' % (name))
-
-    return True
+    sc = gbl.gSystem.Load(name)
+    if sc == -1:
+        raise RuntimeError("Unable to load reflection library "+name)
 
 def _begin_capture_stderr():
-    _backend._begin_capture_stderr()
+    _backend._begin_capture_stderr() # TODO: fix this
 
 def _end_capture_stderr():
     err = _backend._end_capture_stderr()

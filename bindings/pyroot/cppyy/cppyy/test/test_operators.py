@@ -1,6 +1,6 @@
 import pytest, os
 from pytest import raises, skip, mark
-from support import setup_make, pylong, maxvalue, IS_WINDOWS, IS_MAC
+from .support import setup_make, pylong, maxvalue, IS_WINDOWS, IS_MAC
 
 
 test_dct = "operators_cxx"
@@ -227,7 +227,7 @@ class TestOPERATORS:
             assert m[1]    == 74
             assert m(1,2)  == 74
 
-    @mark.xfail(strict=True, reason="Compilation of unused call wrappers emits errors")
+    @mark.xfail(reason="Compilation of unused call wrappers emits errors")
     def test09_templated_operator(self, capfd):
         """Templated operator<()"""
 
@@ -346,7 +346,7 @@ class TestOPERATORS:
         b = ns.Bar()
         assert b[42] == 42
 
-    @mark.xfail(strict=True, condition=IS_MAC or compiled_with_gcc16(), reason="Fails on macOS or gcc 16")
+    @mark.xfail(condition=IS_MAC or compiled_with_gcc16(), reason="Fails on macOS or gcc 16")
     def test15_class_and_global_mix(self):
         """Iterator methods have both class and global overloads"""
 

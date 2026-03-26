@@ -1,6 +1,6 @@
 import pytest
 from pytest import raises, skip
-from support import ispypy
+from .support import ispypy
 
 
 class TestAPI:

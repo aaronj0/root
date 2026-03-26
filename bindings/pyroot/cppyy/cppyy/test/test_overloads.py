@@ -1,6 +1,6 @@
 import pytest, os
 from pytest import raises, skip, mark
-from support import setup_make, ispypy, IS_WINDOWS, IS_MAC_ARM
+from .support import setup_make, ispypy, IS_WINDOWS, IS_MAC_ARM
 
 
 test_dct = "overloads_cxx"

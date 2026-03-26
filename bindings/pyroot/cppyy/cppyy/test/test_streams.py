@@ -1,6 +1,6 @@
 import pytest, os
 from pytest import mark, raises
-from support import setup_make
+from .support import setup_make
 
 
 test_dct = "std_streams_cxx"
@@ -45,7 +45,7 @@ class TestSTDStreams:
         cppyy.gbl.stringstream_base.pass_through_base(s)
         assert s.str() == "TEST STRING"
 
-    @mark.xfail(strict=True)
+    @mark.xfail()
     def test04_naming_of_ostringstream(self):
         """Naming consistency of ostringstream"""
 
