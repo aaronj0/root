@@ -177,8 +177,8 @@ class make_smartptr(object):
             return py_make_smartptr(getattr(gbl, cls), self.ptrcls)
         return self.maker[cls]
 
-# gbl.std.make_shared = make_smartptr(gbl.std.shared_ptr, gbl.std.make_shared)
-# gbl.std.make_unique = make_smartptr(gbl.std.unique_ptr, gbl.std.make_unique)
+gbl.std.make_shared = make_smartptr(gbl.std.shared_ptr, gbl.std.make_shared)
+gbl.std.make_unique = make_smartptr(gbl.std.unique_ptr, gbl.std.make_unique)
 del make_smartptr
 
 
@@ -265,9 +265,18 @@ def macro(cppm):
 def load_library(name):
     """Explicitly load a shared library."""
     with _stderr_capture() as err:
-        result = gbl.Cpp.LoadLibrary(name, True)
-    if result == False:
-        raise RuntimeError('Could not load library "%s": %s' % (name, err.err))
+        gSystem = gbl.gSystem
+        if name[:3] != 'lib':
+            if not gSystem.FindDynamicLibrary(gbl.TString(name), True) and\
+                   gSystem.FindDynamicLibrary(gbl.TString('lib'+name), True):
+                name = 'lib'+name
+        sc = gSystem.Load(name)
+    if sc == -1:
+      # special case for Windows as of python3.8: use winmode=0, otherwise the default
+      # will not consider regular search paths (such as $PATH)
+        if 0x3080000 <= sys.hexversion and 'win32' in sys.platform and os.path.isabs(name):
+            return ctypes.CDLL(name, ctypes.RTLD_GLOBAL, winmode=0)  # raises on error
+        raise RuntimeError('Unable to load library "%s"%s' % (name, err.err))
 
     return True
 
