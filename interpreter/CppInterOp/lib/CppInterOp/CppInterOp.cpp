@@ -760,6 +760,7 @@ TCppScope_t GetScope(const std::string& name, TCppScope_t parent) {
   if (name == "")
     return GetGlobalScope();
 
+  compat::SynthesizingCodeRAII RAII(&getInterp());
   auto* ND = (NamedDecl*)GetNamed(name, parent);
 
   if (!ND || ND == (NamedDecl*)-1)
@@ -828,7 +829,9 @@ TCppScope_t GetParentScope(TCppScope_t scope) {
 
 TCppIndex_t GetNumBases(TCppScope_t klass) {
   auto* D = (Decl*)klass;
-
+  
+  compat::SynthesizingCodeRAII RAII(&getInterp());
+  
   if (auto* CTSD = llvm::dyn_cast_or_null<ClassTemplateSpecializationDecl>(D))
     if (!CTSD->hasDefinition())
       compat::InstantiateClassTemplateSpecialization(getInterp(), CTSD);
@@ -841,6 +844,9 @@ TCppIndex_t GetNumBases(TCppScope_t klass) {
 }
 
 TCppScope_t GetBaseClass(TCppScope_t klass, TCppIndex_t ibase) {
+
+  compat::SynthesizingCodeRAII RAII(&getInterp());
+
   auto* D = (Decl*)klass;
   auto* CXXRD = llvm::dyn_cast_or_null<CXXRecordDecl>(D);
   if (!CXXRD || CXXRD->getNumBases() <= ibase)
@@ -865,6 +871,8 @@ bool IsSubclass(TCppScope_t derived, TCppScope_t base) {
   auto* derived_D = (clang::Decl*)derived;
   auto* base_D = (clang::Decl*)base;
 
+  compat::SynthesizingCodeRAII RAII(&getInterp());
+
   if (!isa<CXXRecordDecl>(derived_D) || !isa<CXXRecordDecl>(base_D))
     return false;
 
@@ -880,6 +888,9 @@ bool IsSubclass(TCppScope_t derived, TCppScope_t base) {
 static unsigned ComputeBaseOffset(const ASTContext& Context,
                                   const CXXRecordDecl* DerivedRD,
                                   const CXXBasePath& Path) {
+  
+  compat::SynthesizingCodeRAII RAII(&getInterp());
+
   CharUnits NonVirtualOffset = CharUnits::Zero();
 
   unsigned NonVirtualStart = 0;
@@ -948,7 +959,9 @@ static void GetClassDecls(TCppScope_t klass,
                           std::vector<TCppFunction_t>& methods) {
   if (!klass)
     return;
-
+  
+  compat::SynthesizingCodeRAII RAII(&getInterp());
+  
   auto* D = (clang::Decl*)klass;
 
   if (auto* TD = dyn_cast<TypedefNameDecl>(D))
