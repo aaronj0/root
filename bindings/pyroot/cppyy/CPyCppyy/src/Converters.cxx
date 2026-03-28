@@ -29,6 +29,9 @@
 #include <sstream>
 #include <cstddef>
 #include <string_view>
+#if __cplusplus >= 202002L
+#include <span>
+#endif
 
 // codecvt does not exist for gcc4.8.5 and is in principle deprecated; it is
 // only used in py2 for char -> wchar_t conversion for std::wstring; if not
@@ -1292,7 +1295,8 @@ bool CPyCppyy::CStringConverter::SetArg(
 
 // verify (too long string will cause truncation, no crash)
     if (fMaxSize != std::string::npos && fMaxSize < fBuffer.size())
-        PyErr_Warn(PyExc_RuntimeWarning, (char*)"string too long for char array (truncated)");
+        if (PyErr_WarnEx(PyExc_RuntimeWarning, (char*)"string too long for char array (truncated)", 1) < 0)
+            return false;
 
     if (!ctxt->fPyContext) {
     // use internal buffer as workaround
@@ -1337,7 +1341,8 @@ bool CPyCppyy::CStringConverter::ToMemory(PyObject* value, void* address, PyObje
 
 // verify (too long string will cause truncation, no crash)
     if (fMaxSize != std::string::npos && fMaxSize < (std::string::size_type)len)
-        PyErr_Warn(PyExc_RuntimeWarning, (char*)"string too long for char array (truncated)");
+        if (PyErr_WarnEx(PyExc_RuntimeWarning, (char*)"string too long for char array (truncated)", 1) < 0)
+            return false;
 
 // if address is available, and it wasn't set by this converter, assume a byte-wise copy;
 // otherwise assume a pointer copy (this relies on the converter to be used for properties,
@@ -1414,7 +1419,8 @@ bool CPyCppyy::WCStringConverter::ToMemory(PyObject* value, void* address, PyObj
 
 // verify (too long string will cause truncation, no crash)
     if (fMaxSize != std::wstring::npos && fMaxSize < (std::wstring::size_type)len)
-        PyErr_Warn(PyExc_RuntimeWarning, (char*)"string too long for wchar_t array (truncated)");
+        if (PyErr_WarnEx(PyExc_RuntimeWarning, (char*)"string too long for wchar_t array (truncated)", 1) < 0)
+            return false;
 
     Py_ssize_t res = -1;
     if (fMaxSize != std::wstring::npos)
@@ -1473,7 +1479,10 @@ bool CPyCppyy::name##Converter::ToMemory(PyObject* value, void* address, PyObjec
                                                                              \
 /* verify (too long string will cause truncation, no crash) */               \
     if (fMaxSize != std::wstring::npos && maxbytes < len) {                  \
-        PyErr_Warn(PyExc_RuntimeWarning, (char*)"string too long for "#type" array (truncated)");\
+        if (PyErr_WarnEx(PyExc_RuntimeWarning, (char*)"string too long for "#type" array (truncated)", 1) < 0) { \
+            Py_DECREF(bstr);                                                 \
+            return false;                                                    \
+        }                                                                    \
         len = maxbytes;                                                      \
     }                                                                        \
                                                                              \
@@ -1636,6 +1645,78 @@ bool CPyCppyy::VoidArrayConverter::ToMemory(PyObject* value, void* address, PyOb
     *(void**)address = buf;
     return true;
 }
+
+#if __cplusplus >= 202002L
+
+namespace CPyCppyy {
+
+class StdSpanConverter : public InstanceConverter {
+public:
+    StdSpanConverter(std::string const &typeName, Cppyy::TCppType_t klass, bool keepControl = false)
+        : InstanceConverter{klass, keepControl}, fTypeName{typeName}
+    {
+    }
+
+    ~StdSpanConverter()
+    {
+        if (fHasBuffer) {
+            PyBuffer_Release(&fBufinfo);
+        }
+    }
+
+    bool SetArg(PyObject *, Parameter &, CallContext * = nullptr) override;
+    bool HasState() override { return true; }
+
+private:
+    std::string fTypeName;
+    std::span<std::size_t> fBuffer;
+    bool fHasBuffer = false;
+    Py_buffer fBufinfo;
+};
+
+} // namespace CPyCppyy
+
+//----------------------------------------------------------------------------
+bool CPyCppyy::StdSpanConverter::SetArg(PyObject *pyobject, Parameter &para, CallContext *ctxt)
+{
+    auto typecodeFound = Utility::TypecodeMap().find(fTypeName);
+
+// attempt to get buffer if the C++ type maps to a buffer type
+    if (typecodeFound == Utility::TypecodeMap().end() || !PyObject_CheckBuffer(pyobject)) {
+    // Fall back to regular InstanceConverter
+        return this->InstanceConverter::SetArg(pyobject, para, ctxt);
+    }
+
+    Py_ssize_t buflen = 0;
+    char typecode = typecodeFound->second;
+    memset(&fBufinfo, 0, sizeof(Py_buffer));
+
+    if (PyObject_GetBuffer(pyobject, &fBufinfo, PyBUF_FORMAT) == 0) {
+        if (!strchr(fBufinfo.format, typecode)) {
+            PyErr_Format(PyExc_TypeError,
+                         "buffer has incompatible type: expected '%c' for C++ type '%s', but got format '%s'", typecode,
+                         fTypeName.c_str(), fBufinfo.format ? fBufinfo.format : "<null>");
+            PyBuffer_Release(&fBufinfo);
+            return false;
+        }
+        buflen = Utility::GetBuffer(pyobject, typecode, 1, para.fValue.fVoidp, false);
+    }
+
+// ok if buffer exists (can't perform any useful size checks)
+    if (para.fValue.fVoidp && buflen != 0) {
+    // We assume the layout for any std::span<T> is the same, and just use
+    // std::span<std::size_t> as a placeholder. Not elegant, but works.
+        fBuffer = std::span<std::size_t>{(std::size_t *)para.fValue.fVoidp, static_cast<std::size_t>(buflen)};
+        fHasBuffer = true;
+        para.fValue.fVoidp = &fBuffer;
+        para.fTypeCode = 'V';
+        return true;
+    }
+
+    return false;
+}
+
+#endif // __cplusplus >= 202002L
 
 
 //----------------------------------------------------------------------------
@@ -3177,11 +3258,25 @@ bool CPyCppyy::InitializerListConverter::SetArg(
 #endif
 }
 
+namespace CPyCppyy {
+
+// raising converter to take out overloads
+class NotImplementedConverter : public Converter {
+public:
+    NotImplementedConverter(PyObject *errorType, std::string const &message) : fErrorType{errorType}, fMessage{message} {}
+    bool SetArg(PyObject*, Parameter&, CallContext* = nullptr) override;
+private:
+    PyObject *fErrorType;
+    std::string fMessage;
+};
+
+} // namespace CPyCppyy
+
 //----------------------------------------------------------------------------
 bool CPyCppyy::NotImplementedConverter::SetArg(PyObject*, Parameter&, CallContext*)
 {
 // raise a NotImplemented exception to take a method out of overload resolution
-    PyErr_SetString(PyExc_NotImplementedError, "this method cannot (yet) be called");
+    PyErr_SetString(fErrorType, fMessage.c_str());
     return false;
 }
 
@@ -3246,6 +3341,14 @@ CPyCppyy::Converter* CPyCppyy::CreateConverter(const std::string& fullType, cdim
     bool isConst = strncmp(resolvedType.c_str(), "const", 5) == 0;
     const std::string& cpd = TypeManip::compound(resolvedType);
     std::string realType   = TypeManip::clean_type(resolvedType, false, true);
+
+// mutable pointer references (T*&) are incompatible with Python's object model
+   if (cpd == "*&") {
+       return new NotImplementedConverter{PyExc_TypeError,
+           "argument type '" + resolvedType + "' is not supported: non-const references to pointers (T*&) allow a"
+           " function to replace the pointer itself. Python cannot represent this safely. Consider changing the"
+           " C++ API to return the new pointer or use a wrapper"};
+   }
 
 // accept unqualified type (as python does not know about qualifiers)
     h = gConvFactories.find((isConst ? "const " : "") + realType + cpd);
@@ -3331,6 +3434,31 @@ CPyCppyy::Converter* CPyCppyy::CreateConverter(const std::string& fullType, cdim
         }
     }
 
+// FIXME: Taken from ROOT, update this to use CppInterOp for span check and extracting value type
+#if __cplusplus >= 202002L
+//-- special case: std::span
+    pos = resolvedType.find("span<");
+    if (pos == 0 /* no std:: */ || pos == 5 /* with std:: */ ||
+        pos == 6 /* const no std:: */ || pos == 11 /* const with std:: */ ) {
+
+        auto pos1 = realType.find('<');
+        auto pos21 = realType.find(','); // for the case there are more template args
+        auto pos22 = realType.find('>');
+        auto len = std::min(pos21 - pos1, pos22 - pos1) - 1;
+        std::string value_type = realType.substr(pos1+1, len);
+
+        // strip leading "const "
+        const std::string cprefix = "const ";
+        if (value_type.compare(0, cprefix.size(), cprefix) == 0) {
+            value_type = value_type.substr(cprefix.size());
+        }
+
+        std::string span_type = "std::span<" + value_type + ">";
+
+        return new StdSpanConverter{value_type, Cppyy::GetScope(span_type)};
+    }
+#endif
+
 // converters for known C++ classes and default (void*)
     Converter* result = nullptr;
     if (Cppyy::TCppScope_t klass = Cppyy::GetFullScope(realType)) {
@@ -3372,7 +3500,7 @@ CPyCppyy::Converter* CPyCppyy::CreateConverter(const std::string& fullType, cdim
         if (h != gConvFactories.end())
             return (h->second)(dims);
     // else, unhandled moves
-        result = new NotImplementedConverter(failure_msg);
+        result = new NotImplementedConverter{PyExc_NotImplementedError, "this method cannot (yet) be called"};
     }
 
     if (!result && h != gConvFactories.end())
@@ -3385,7 +3513,8 @@ CPyCppyy::Converter* CPyCppyy::CreateConverter(const std::string& fullType, cdim
         else if (!cpd.empty())
             result = new VoidArrayConverter(/* keepControl= */ true, failure_msg);        // "user knows best"
         else
-            result = new NotImplementedConverter(failure_msg);   // fails on use
+            // fails on use
+            result = new NotImplementedConverter{PyExc_NotImplementedError, "this method cannot (yet) be called"};
     }
 
     return result;
@@ -3428,6 +3557,14 @@ CPyCppyy::Converter* CPyCppyy::CreateConverter(Cppyy::TCppType_t type, cdims_t d
     Cppyy::TCppType_t realType = Cppyy::ResolveType(Cppyy::GetRealType(type));
     std::string realTypeStr   = Cppyy::GetTypeAsString(realType);
     std::string realUnresolvedTypeStr   = TypeManip::clean_type(fullType, false, true);
+
+// mutable pointer references (T*&) are incompatible with Python's object model
+   if (cpd == "*&") {
+       return new NotImplementedConverter{PyExc_TypeError,
+           "argument type '" + resolvedTypeStr + "' is not supported: non-const references to pointers (T*&) allow a"
+           " function to replace the pointer itself. Python cannot represent this safely. Consider changing the"
+           " C++ API to return the new pointer or use a wrapper"};
+   }
 
 // accept unqualified type (as python does not know about qualifiers)
     h = gConvFactories.find((isConst ? "const " : "") + realTypeStr + cpd);
@@ -3579,7 +3716,7 @@ CPyCppyy::Converter* CPyCppyy::CreateConverter(Cppyy::TCppType_t type, cdims_t d
         if (h != gConvFactories.end())
             return (h->second)(dims);
     // else, unhandled moves
-        result = new NotImplementedConverter(failure_msg);
+        result = new NotImplementedConverter{PyExc_NotImplementedError, "this method cannot (yet) be called"};
     }
 
     if (!result && h != gConvFactories.end()) {
@@ -3592,7 +3729,8 @@ CPyCppyy::Converter* CPyCppyy::CreateConverter(Cppyy::TCppType_t type, cdims_t d
         } else if (!cpd.empty()) {
             result = new VoidArrayConverter(/* keepControl= */ true, failure_msg);        // "user knows best"
         } else {
-            result = new NotImplementedConverter(failure_msg);   // fails on use
+            // fails on use
+            result = new NotImplementedConverter{PyExc_NotImplementedError, "this method cannot (yet) be called"};
         }
     }
 

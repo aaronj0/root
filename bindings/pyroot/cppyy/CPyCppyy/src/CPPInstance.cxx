@@ -405,7 +405,7 @@ PyCFunction &CPPInstance::ReduceMethod() {
    return reducer;
 }
 
-PyObject *op_reduce(PyObject *self, PyObject * args)
+PyObject *op_reduce(PyObject *self, PyObject *args)
 {
    auto &reducer = CPPInstance::ReduceMethod();
    if (!reducer) {
