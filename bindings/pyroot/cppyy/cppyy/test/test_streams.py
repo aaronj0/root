@@ -1,6 +1,6 @@
 import pytest, os
 from pytest import mark, raises
-from .support import setup_make
+from support import setup_make
 
 
 test_dct = "std_streams_cxx"

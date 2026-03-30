@@ -179,6 +179,7 @@ class make_smartptr(object):
 
 gbl.std.make_shared = make_smartptr(gbl.std.shared_ptr, gbl.std.make_shared)
 gbl.std.make_unique = make_smartptr(gbl.std.unique_ptr, gbl.std.make_unique)
+gbl.gInterpreter = gbl.TInterpreter.Instance()
 del make_smartptr
 
 

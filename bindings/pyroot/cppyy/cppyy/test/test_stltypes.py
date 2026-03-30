@@ -1,7 +1,7 @@
 # -*- coding: UTF-8 -*-
 import sys, pytest, os
 from pytest import mark, raises, skip
-from .support import setup_make, pylong, pyunicode, maxvalue, ispypy, IS_WINDOWS
+from support import setup_make, pylong, pyunicode, maxvalue, ispypy, IS_WINDOWS
 
 test_dct = "stltypes_cxx"
 

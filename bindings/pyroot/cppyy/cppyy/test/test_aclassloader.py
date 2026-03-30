@@ -1,6 +1,6 @@
 import pytest, os
 from pytest import raises, mark
-from .support import setup_make, IS_WINDOWS
+from support import setup_make, IS_WINDOWS
 
 test_dct = "libexample_cxx"
 

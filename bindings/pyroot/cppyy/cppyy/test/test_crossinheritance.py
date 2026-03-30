@@ -1,6 +1,6 @@
 import os, pytest
 from pytest import raises, skip, mark
-from .support import setup_make, pylong, IS_MAC_ARM, IS_WINDOWS
+from support import setup_make, pylong, IS_MAC_ARM, IS_WINDOWS
 
 test_dct = "crossinheritance_cxx"
 

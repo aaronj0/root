@@ -1,6 +1,6 @@
 import pytest
 from pytest import raises, skip, mark
-from .support import IS_MAC_ARM, IS_WINDOWS
+from support import IS_MAC_ARM, IS_WINDOWS
 
 
 

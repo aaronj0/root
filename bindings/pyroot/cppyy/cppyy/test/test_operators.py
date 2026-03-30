@@ -1,6 +1,6 @@
 import pytest, os
 from pytest import raises, skip, mark
-from .support import setup_make, pylong, maxvalue, IS_WINDOWS, IS_MAC
+from support import setup_make, pylong, maxvalue, IS_WINDOWS, IS_MAC
 
 
 test_dct = "operators_cxx"

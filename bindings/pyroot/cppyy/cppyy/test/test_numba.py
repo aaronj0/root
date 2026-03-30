@@ -1,7 +1,7 @@
 import os, pytest
 import math, time
 from pytest import mark, raises
-from .support import setup_make, IS_MAC, IS_WINDOWS
+from support import setup_make, IS_MAC, IS_WINDOWS
 
 try:
     import numba

@@ -1,6 +1,6 @@
 import pytest, os
 from pytest import mark, raises
-from .support import setup_make, pylong
+from support import setup_make, pylong
 
 
 test_dct = "templates_cxx"

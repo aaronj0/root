@@ -1,6 +1,6 @@
 import sys, pytest, os
 from pytest import mark, raises, skip
-from .support import setup_make, pylong, pyunicode, IS_MAC, IS_MAC_ARM, IS_WINDOWS
+from support import setup_make, pylong, pyunicode, IS_MAC, IS_MAC_ARM, IS_WINDOWS
 
 test_dct = "datatypes_cxx"
 

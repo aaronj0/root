@@ -1,6 +1,6 @@
 import sys, pytest, os
 from pytest import mark, raises, skip
-from .support import setup_make, ispypy, IS_WINDOWS, IS_MAC_ARM
+from support import setup_make, ispypy, IS_WINDOWS, IS_MAC_ARM
 
 
 test_dct = "doc_helper_cxx"

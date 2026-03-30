@@ -3,7 +3,7 @@ import os
 import pytest
 from pytest import mark, raises, skip
 
-from .support import IS_WINDOWS, ispypy, pylong, setup_make
+from support import IS_WINDOWS, ispypy, pylong, setup_make
 
 test_dct = "advancedcpp_cxx"
 

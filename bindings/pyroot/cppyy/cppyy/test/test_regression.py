@@ -1,6 +1,6 @@
 import os, sys, pytest
 from pytest import mark, raises, skip
-from .support import setup_make, IS_WINDOWS, ispypy, IS_MAC, IS_MAC_ARM
+from support import setup_make, IS_WINDOWS, ispypy, IS_MAC, IS_MAC_ARM
 
 
 class TestREGRESSION:

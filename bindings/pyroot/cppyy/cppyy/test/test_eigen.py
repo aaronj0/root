@@ -1,6 +1,6 @@
 import py, os, pytest
 from pytest import mark, raises
-from .support import setup_make
+from support import setup_make
 
 inc_paths = [os.path.join(os.path.sep, 'usr', 'include'),
              os.path.join(os.path.sep, 'usr', 'local', 'include')]
