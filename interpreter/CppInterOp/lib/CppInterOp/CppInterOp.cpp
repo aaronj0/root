@@ -609,6 +609,7 @@ size_t SizeOf(TCppScope_t scope) {
     return INTEROP_RETURN(0);
 
   if (auto* RD = dyn_cast<RecordDecl>(static_cast<Decl*>(scope))) {
+    compat::SynthesizingCodeRAII RAII(&getInterp());
     ASTContext& Context = RD->getASTContext();
     const ASTRecordLayout& Layout = Context.getASTRecordLayout(RD);
     return INTEROP_RETURN(Layout.getSize().getQuantity());
