@@ -1896,6 +1896,7 @@ TCppScope_t LookupDatamember(const std::string& name, TCppScope_t parent) {
 
 bool IsLambdaClass(TCppType_t type) {
   INTEROP_TRACE(type);
+  compat::SynthesizingCodeRAII RAII(&getInterp());
   QualType QT = QualType::getFromOpaquePtr(type);
   if (auto* CXXRD = QT->getAsCXXRecordDecl()) {
     return INTEROP_RETURN(CXXRD->isLambda());
