@@ -263,7 +263,8 @@ namespace {
     bool needsToReserveAllocationSpace() override { return true; }
   };
 
-  /// A JITLinkMemoryManager for Cling that never frees its allocations.
+  /// A JITLinkMemoryManager for Cling that retains its allocations for the
+  /// interpreter's lifetime, freeing them only when it is destroyed.
   class ClingJITLinkMemoryManager : public InProcessMemoryManager {
   public:
     using InProcessMemoryManager::InProcessMemoryManager;
@@ -273,16 +274,31 @@ namespace {
       // Disabled until CallFunc is informed about unloading, and can
       // re-generate the wrapper (if the decl is still available). See
       // https://github.com/root-project/root/issues/10898
-
-      // We still have to release the allocations which resets their addresses
-      // to FinalizedAlloc::InvalidAddr, or the assertion in ~FinalizedAlloc
-      // will be unhappy...
-      for (auto &Alloc : Allocs) {
-        Alloc.release();
-      }
-      // Pretend we successfully deallocated everything...
+      //
+      // We cannot free now (that would invalidate cached CallFunc wrappers
+      // still pointing into the unloaded code), but we must not drop the
+      // handles either: each finalized allocation owns a vector of JITLink
+      // dealloc actions (since LLVM 21, eh-frame deregistration), so orphaning
+      // it via FinalizedAlloc::release() leaks that vector. Retain the handles
+      // and let the base class free them -- running the dealloc actions and
+      // unmapping -- when this manager is destroyed, at interpreter teardown:
+      // the only point at which no wrapper can still call into the freed code.
+      std::lock_guard<std::mutex> G(m_RetainedMutex);
+      for (auto &Alloc : Allocs)
+        m_Retained.push_back(std::move(Alloc));
       OnDeallocated(Error::success());
     }
+
+    ~ClingJITLinkMemoryManager() override {
+      if (!m_Retained.empty())
+        InProcessMemoryManager::deallocate(
+            std::move(m_Retained),
+            [](Error Err) { consumeError(std::move(Err)); });
+    }
+
+  private:
+    std::mutex m_RetainedMutex;
+    std::vector<FinalizedAlloc> m_Retained;
   };
 
   /// A DynamicLibrarySearchGenerator that uses ResourceTracker to remember
