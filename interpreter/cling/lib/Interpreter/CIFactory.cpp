@@ -1622,7 +1622,13 @@ namespace {
     for (auto& E : moduleExtensions)
       FrontendOpts.ModuleFileExtensions.push_back(E);
 
-    FrontendOpts.DisableFree = true;
+    // Overwrite the -disable-free the clang driver adds to every cc1 line:
+    // Interpreter::ShutDown() must destroy Sema, the ASTContext and the
+    // ASTConsumer rather than leak them. A process can create and destroy
+    // many interpreters, and each leaked frontend keeps several hundred KB
+    // alive; past ~16 leaked pointers llvm::BuryPointer's graveyard is full
+    // and LeakSanitizer reports the overflow as genuine leaks.
+    FrontendOpts.DisableFree = false;
 
     // Set up compiler language and target
     if (!SetupCompiler(CI.get(), COpts, InitLang, InitTarget))

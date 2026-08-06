@@ -625,11 +625,13 @@ namespace cling {
           CI->resetAndLeakPreprocessor();
           CI->resetAndLeakSourceManager();
           CI->resetAndLeakFileManager();
-        } else {
-          CI->setPreprocessor(nullptr);
-          CI->setSourceManager(nullptr);
-          CI->setFileManager(nullptr);
         }
+        // With DisableFree off, leave the Preprocessor, SourceManager and
+        // FileManager to ~CompilerInstance: destroying the Preprocessor
+        // here, while the incremental parser and codegen are still wired,
+        // crashes in ~PragmaNamespace on pragma handlers registered by
+        // rootcling. The CompilerInstance destroys the three members in
+        // reverse member order after the consumer is gone.
       }
 
       LO.setCompilingModule(clang::LangOptions::CMK_None);
