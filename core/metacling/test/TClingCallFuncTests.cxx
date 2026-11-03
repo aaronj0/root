@@ -276,7 +276,9 @@ TEST(TClingCallFunc, FunctionWrapperSharedPtr)
 }
 
 #include "TClass.h"
+#include "TList.h"
 #include "TMethod.h"
+#include "TMethodCall.h"
 
 #include <cstddef>
 #include <utility>
@@ -593,4 +595,84 @@ struct IOCtorVoidRef {
          cl->Destructor(static_cast<int *>(obj) + i, /*dtorOnly=*/true);
       }
    }
+}
+
+// The argument count passed to the generic wrapper selects the default arguments.
+TEST(TClingCallFunc, GenericWrapperDefaultArguments)
+{
+   gInterpreter->Declare(R"cpp(
+                           int GenericWrapperDefaultArguments(int a, int b = 10) { return a + b; }
+                           )cpp");
+   CallFuncRAII CfRAII("", "GenericWrapperDefaultArguments", "int, int");
+   auto wrapper = gInterpreter->CallFunc_IFacePtr(CfRAII.GetCF()).fGeneric;
+   ASSERT_NE(wrapper, nullptr);
+   int a = 1;
+   int b = 2;
+   void *args[] = {&a, &b};
+   int result = 0;
+   wrapper(nullptr, 1, args, &result);
+   EXPECT_EQ(result, 11);
+   wrapper(nullptr, 2, args, &result);
+   EXPECT_EQ(result, 3);
+}
+
+// A null result discards the return value of a non-void function.
+TEST(TClingCallFunc, GenericWrapperDiscardedResult)
+{
+   gInterpreter->Declare(R"cpp(
+                           int gGenericWrapperDiscardedResultCalls = 0;
+                           std::string GenericWrapperDiscardedResult() {
+                              ++gGenericWrapperDiscardedResultCalls;
+                              return "discarded";
+                           }
+                           )cpp");
+   CallFuncRAII CfRAII("", "GenericWrapperDiscardedResult", "");
+   gInterpreter->CallFunc_Exec(CfRAII.GetCF(), /*address*/ nullptr);
+   auto wrapper = gInterpreter->CallFunc_IFacePtr(CfRAII.GetCF()).fGeneric;
+   ASSERT_NE(wrapper, nullptr);
+   wrapper(nullptr, 0, nullptr, nullptr);
+   EXPECT_EQ(gInterpreter->Calc("gGenericWrapperDiscardedResultCalls"), 2);
+}
+
+// The wrapper of a function is shared and outlives the CallFunc it was made for.
+TEST(TClingCallFunc, GenericWrapperLifetime)
+{
+   gInterpreter->Declare(R"cpp(
+                           int GenericWrapperLifetime(int a) { return 2 * a; }
+                           )cpp");
+   TInterpreter::CallFuncIFacePtr_t::Generic_t first = nullptr;
+   {
+      CallFuncRAII CfRAII("", "GenericWrapperLifetime", "int");
+      first = gInterpreter->CallFunc_IFacePtr(CfRAII.GetCF()).fGeneric;
+   }
+   ASSERT_NE(first, nullptr);
+   CallFuncRAII CfRAII("", "GenericWrapperLifetime", "int");
+   EXPECT_EQ(gInterpreter->CallFunc_IFacePtr(CfRAII.GetCF()).fGeneric, first);
+   int a = 21;
+   void *args[] = {&a};
+   int result = 0;
+   first(nullptr, 1, args, &result);
+   EXPECT_EQ(result, 42);
+}
+
+// A method made visible by a using-declaration is called on the class that has the using-declaration, even
+// if it comes from a base class that is not the first one.
+TEST(TClingCallFunc, UsingDeclaredMethodOfSecondBase)
+{
+   gInterpreter->Declare(R"cpp(
+                           struct UsingDeclaredMethodBase0 { int fPad = 1; };
+                           struct UsingDeclaredMethodBase1 { int fValue = 2; int Get() const { return fValue; } };
+                           struct UsingDeclaredMethodDerived : UsingDeclaredMethodBase0, UsingDeclaredMethodBase1 {
+                              using UsingDeclaredMethodBase1::Get;
+                           };
+                           UsingDeclaredMethodDerived gUsingDeclaredMethodDerived;
+                           )cpp");
+   TClass *cl = TClass::GetClass("UsingDeclaredMethodDerived");
+   ASSERT_NE(cl, nullptr);
+   auto method = static_cast<TMethod *>(cl->GetListOfMethods()->FindObject("Get"));
+   ASSERT_NE(method, nullptr);
+   TMethodCall call(method);
+   Long_t result = 0;
+   call.Execute(reinterpret_cast<void *>(gInterpreter->Calc("&gUsingDeclaredMethodDerived")), result);
+   EXPECT_EQ(result, 2);
 }
