@@ -46,6 +46,7 @@ namespace clang {
    class ClassTemplateSpecializationDecl;
    class CompilerInstance;
    class CXXBaseSpecifier;
+   class CXXConstructorDecl;
    class CXXRecordDecl;
    class Decl;
    class DeclContext;
@@ -392,7 +393,9 @@ EIOCtorCategory CheckConstructor(const clang::CXXRecordDecl*, const RConstructor
 bool CheckDefaultConstructor(const clang::CXXRecordDecl*, const cling::Interpreter& interp);
 
 //______________________________________________________________________________
-EIOCtorCategory CheckIOConstructor(const clang::CXXRecordDecl*, const char *, const clang::CXXRecordDecl *, const cling::Interpreter& interp);
+EIOCtorCategory CheckIOConstructor(const clang::CXXRecordDecl *, const char *, const clang::CXXRecordDecl *,
+                                   const cling::Interpreter &interp,
+                                   const clang::CXXConstructorDecl **ioCtor = nullptr);
 
 //______________________________________________________________________________
 const clang::FunctionDecl* ClassInfo__HasMethod(const clang::DeclContext *cl, char const*, const cling::Interpreter& interp);

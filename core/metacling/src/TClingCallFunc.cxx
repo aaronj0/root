@@ -67,6 +67,7 @@ C++ interpreter and the Clang C++ compiler, not CINT.
 
 #include "clang/Sema/SemaInternal.h"
 
+#include <algorithm>
 #include <map>
 #include <string>
 #include <sstream>
@@ -1237,6 +1238,36 @@ void TClingCallFunc::ExecWithReturn(void *address, void *ret/*= 0*/)
    exec(address, ret);
 }
 
+/// Constructs `nary` objects of class `RD` (one if `nary` is 0) with its I/O constructor, at `address` or
+/// with operator new. Returns null if `RD` has no I/O constructor taking a `type_name*` or `type_name&`.
+static void *ConstructWithIOConstructor(const CXXRecordDecl *RD, ROOT::TMetaUtils::EIOCtorCategory kind,
+                                        const std::string &type_name, void *address, unsigned long nary,
+                                        const cling::Interpreter &interp)
+{
+   const CXXConstructorDecl *ctor = nullptr;
+   ROOT::TMetaUtils::CheckIOConstructor(RD, type_name.c_str(), nullptr, interp, &ctor);
+   if (!ctor)
+      return nullptr;
+   Cpp::JitCall ctorCall = Cpp::MakeFunctionCallable(ctor);
+   if (!ctorCall)
+      return nullptr;
+   // The I/O constructor gets a null pointer, or a reference to storage it does not use.
+   void *nullArg = nullptr;
+   char unusedArg = 0;
+   void *args[] = {kind == ROOT::TMetaUtils::EIOCtorCategory::kIOPtrType ? (void *)&nullArg : (void *)&unusedArg};
+   if (!address) {
+      void *obj = nullptr;
+      ctorCall.InvokeConstructor(&obj, /*nary=*/1, {args, 1});
+      return obj;
+   }
+   const size_t size = Cpp::SizeOf(RD);
+   for (unsigned long i = 0; i < std::max(nary, 1UL); ++i) {
+      void *obj = static_cast<char *>(address) + i * size;
+      ctorCall.InvokeConstructor(&obj, /*nary=*/1, {args, 1}, /*is_arena=*/address);
+   }
+   return address;
+}
+
 void *TClingCallFunc::ExecDefaultConstructor(const TClingClassInfo *info,
                                              ROOT::TMetaUtils::EIOCtorCategory kind,
                                              const std::string &type_name,
@@ -1245,6 +1276,16 @@ void *TClingCallFunc::ExecDefaultConstructor(const TClingClassInfo *info,
    if (!info->IsValid()) {
       ::Error("TClingCallFunc::ExecDefaultConstructor", "Invalid class info!");
       return nullptr;
+   }
+   // An array from operator new[] needs the default constructor: DeleteArray releases it with delete[].
+   const auto *RD = llvm::dyn_cast<CXXRecordDecl>(info->GetDecl());
+   if (RD &&
+       (kind == ROOT::TMetaUtils::EIOCtorCategory::kIOPtrType ||
+        kind == ROOT::TMetaUtils::EIOCtorCategory::kIORefType) &&
+       (address || nary == 0)) {
+      R__LOCKGUARD_CLING(gInterpreterMutex);
+      if (void *obj = ConstructWithIOConstructor(RD, kind, type_name, address, nary, *fInterp))
+         return obj;
    }
    // this function's clients assume nary = 0 for operator new and nary > 0 for array new. JitCall expects
    // the number of objects you want to construct; nary = 1 constructs a single object

@@ -278,6 +278,10 @@ TEST(TClingCallFunc, FunctionWrapperSharedPtr)
 #include "TClass.h"
 #include "TMethod.h"
 
+#include <cstddef>
+#include <utility>
+#include <vector>
+
 TEST(TClingCallFunc, ROOT_6523) {
   std::string theString("blaaah");
   std::string searchFor("aaa");
@@ -543,4 +547,50 @@ TEST(TClingCallFunc, GH_14425_Templates)
    gInterpreter->CallFunc_SetArg(CfI, &objI);
    int valI = gInterpreter->CallFunc_ExecInt(CfI, /*address*/ 0);
    EXPECT_EQ(valI, 7);
+}
+
+// Interpreted classes are constructed with their I/O constructor if they have one, like classes with a dictionary.
+TEST(TClingCallFunc, IOConstructor)
+{
+   gInterpreter->Declare(R"CODE(
+#include "TRootIOCtor.h"
+class __void__;
+struct IOCtorOnly {
+   int fValue;
+   IOCtorOnly(TRootIOCtor *) : fValue(1) {}
+};
+struct IOCtorAndDefault {
+   int fValue;
+   IOCtorAndDefault() : fValue(2) {}
+   IOCtorAndDefault(TRootIOCtor *) : fValue(3) {}
+};
+struct IOCtorVoidRef {
+   int fValue;
+   IOCtorVoidRef(__void__ &) : fValue(4) {}
+};
+)CODE");
+   const std::vector<std::pair<const char *, int>> classes = {
+      {"IOCtorOnly", 1}, {"IOCtorAndDefault", 3}, {"IOCtorVoidRef", 4}};
+   for (const auto &[name, value] : classes) {
+      TClass *cl = TClass::GetClass(name);
+      ASSERT_NE(cl, nullptr) << name;
+
+      void *obj = cl->New();
+      ASSERT_NE(obj, nullptr) << name;
+      EXPECT_EQ(value, *static_cast<int *>(obj)) << name;
+      cl->Destructor(obj);
+
+      alignas(alignof(std::max_align_t)) char arena[2 * sizeof(int)];
+      obj = cl->New(arena);
+      EXPECT_EQ(obj, arena) << name;
+      EXPECT_EQ(value, *static_cast<int *>(obj)) << name;
+      cl->Destructor(obj, /*dtorOnly=*/true);
+
+      obj = cl->NewArray(2, arena);
+      EXPECT_EQ(obj, arena) << name;
+      for (int i = 0; i < 2; ++i) {
+         EXPECT_EQ(value, static_cast<int *>(obj)[i]) << name;
+         cl->Destructor(static_cast<int *>(obj) + i, /*dtorOnly=*/true);
+      }
+   }
 }

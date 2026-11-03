@@ -1080,10 +1080,10 @@ bool ROOT::TMetaUtils::CheckDefaultConstructor(const clang::CXXRecordDecl* cl, c
 ////////////////////////////////////////////////////////////////////////////////
 /// Checks IO constructor - must be public and with specified argument
 
-ROOT::TMetaUtils::EIOCtorCategory ROOT::TMetaUtils::CheckIOConstructor(const clang::CXXRecordDecl *cl,
-                                                                       const char *typeOfArg,
-                                                                       const clang::CXXRecordDecl *expectedArgType,
-                                                                       const cling::Interpreter& interpreter)
+ROOT::TMetaUtils::EIOCtorCategory
+ROOT::TMetaUtils::CheckIOConstructor(const clang::CXXRecordDecl *cl, const char *typeOfArg,
+                                     const clang::CXXRecordDecl *expectedArgType, const cling::Interpreter &interpreter,
+                                     const clang::CXXConstructorDecl **ioCtor /*= nullptr*/)
 {
    if (typeOfArg && !expectedArgType) {
       const cling::LookupHelper& lh = interpreter.getLookupHelper();
@@ -1122,14 +1122,19 @@ ROOT::TMetaUtils::EIOCtorCategory ROOT::TMetaUtils::CheckIOConstructor(const cla
          const clang::CXXRecordDecl *argDecl = argType->getAsCXXRecordDecl();
          if (argDecl) {
             if (argDecl->getCanonicalDecl() == expectedArgType->getCanonicalDecl()) {
+               if (ioCtor)
+                  *ioCtor = *iter;
                return ioCtorCategory;
             }
          } else {
             std::string realArg = argType.getAsString();
             std::string clarg("class ");
             clarg += typeOfArg;
-            if (realArg == clarg)
+            if (realArg == clarg) {
+               if (ioCtor)
+                  *ioCtor = *iter;
                return ioCtorCategory;
+            }
          }
    } // for each constructor
 
