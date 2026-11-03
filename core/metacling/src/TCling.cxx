@@ -8341,6 +8341,7 @@ void TCling::CallFunc_SetFuncProto(CallFunc_t* func, ClassInfo_t* info, const ch
 
 std::string TCling::CallFunc_GetWrapperCode(CallFunc_t *func) const
 {
+   R__LOCKGUARD_CLING(gInterpreterMutex);
    TClingCallFunc *f = (TClingCallFunc *)func;
    std::string wrapper_name;
    std::string wrapper;
