@@ -3278,7 +3278,7 @@ static void CallCladFunction(TInterpreter::CallFuncIFacePtr_t::Generic_t FuncPtr
    void *args[3];
    args[0] = &vars;
    if (!pars) {
-      // __attribute__((used)) extern "C" void __cf_0(void* obj, int nargs, void** args, void* ret)
+      // __attribute__((used)) extern "C" void __cf_0(void* obj, decltype(sizeof(0)) nargs, void** args, void* ret)
       // {
       //    if (ret) {
       //       new (ret) (double) (((double (&)(double*))TFormula____id)(*(double**)args[0]));
@@ -3291,7 +3291,7 @@ static void CallCladFunction(TInterpreter::CallFuncIFacePtr_t::Generic_t FuncPtr
       args[1] = &result;
       (*FuncPtr)(nullptr, 2, args, /*ret*/ nullptr); // We do not use ret in a return-void func.
    } else {
-      // __attribute__((used)) extern "C" void __cf_0(void* obj, int nargs, void** args, void* ret)
+      // __attribute__((used)) extern "C" void __cf_0(void* obj, decltype(sizeof(0)) nargs, void** args, void* ret)
       // {
       //    ((void (&)(double*, double*, double*))TFormula____id_grad_1)(*(double**)args[0],
       //                                                                 *(double**)args[1],

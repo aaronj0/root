@@ -340,13 +340,12 @@ void TDirectory::CleanTargets()
 
 static TBuffer* R__CreateBuffer()
 {
-   typedef void (*tcling_callfunc_Wrapper_t)(void*, int, void**, void*);
-   static tcling_callfunc_Wrapper_t creator = nullptr;
+   static TInterpreter::CallFuncIFacePtr_t::Generic_t creator = nullptr;
    if (!creator) {
       R__LOCKGUARD(gROOTMutex);
       TClass *c = TClass::GetClass("TBufferFile");
       TMethod *m = c->GetMethodWithPrototype("TBufferFile","TBuffer::EMode,Int_t",kFALSE,ROOT::kExactMatch);
-      creator = (tcling_callfunc_Wrapper_t)( m->InterfaceMethod() );
+      creator = (TInterpreter::CallFuncIFacePtr_t::Generic_t)(m->InterfaceMethod());
    }
    TBuffer::EMode mode = TBuffer::kWrite;
    Int_t size = 10000;

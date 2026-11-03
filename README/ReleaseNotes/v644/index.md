@@ -34,6 +34,8 @@ After ROOT 6.44, the minimum may rise to 3.31 if an upgrade to LLVM 24 or later 
 
 ## Core
 
+* The generic call wrappers returned by `TInterpreter::CallFunc_IFacePtr()` and `TFunction::InterfaceMethod()` now take the argument count as a `size_t` instead of an `int`, like CppInterOp's `JitCall::GenericCall`. Code that refers to them through `TInterpreter::CallFuncIFacePtr_t::Generic_t` needs no change, code that spells out the signature must use `size_t`.
+
 ## Histograms
 
 ## Math
