@@ -148,6 +148,8 @@ private: // Data Members
    std::vector<std::pair<TClass*,DictFuncPtr_t> > fClassesToUpdate;
    void* fAutoLoadCallBack;
    ULong64_t fTransactionCount; // Cling counter for commited or unloaded transactions which changed the AST.
+   mutable std::unordered_map<std::string, bool> fIsEnumCache; // ClassInfo_IsEnum answers by name.
+   mutable ULong64_t fIsEnumCacheMarker = 0;                   // fTransactionCount for which fIsEnumCache is valid.
    std::vector<const char*> fCurExecutingMacros;
 
    typedef void* SpecialObjectLookupCtx_t;

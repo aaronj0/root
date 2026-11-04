@@ -510,3 +510,44 @@ using func0_ret_t = typename ROOT::TypeTraits::CallableTraits<decltype(func0)>::
    EXPECT_TRUE(res);
 }
 #endif
+
+// https://github.com/root-project/root/issues/10454
+TEST_F(TClingTests, ClassInfoIsEnum)
+{
+   gInterpreter->Declare("enum ClassInfoIsEnumFruit { kClassInfoIsEnumApple };");
+   EXPECT_TRUE(gInterpreter->ClassInfo_IsEnum("ClassInfoIsEnumFruit"));
+   EXPECT_TRUE(gInterpreter->ClassInfo_IsEnum("std::vector<ClassInfoIsEnumFruit>::value_type"));
+   EXPECT_FALSE(gInterpreter->ClassInfo_IsEnum("std::vector<int>"));
+   EXPECT_FALSE(gInterpreter->ClassInfo_IsEnum("kClassInfoIsEnumApple"));
+
+   // An answer must not outlive a change of the AST.
+   EXPECT_FALSE(gInterpreter->ClassInfo_IsEnum("ClassInfoIsEnumLater"));
+   gInterpreter->Declare("enum ClassInfoIsEnumLater { kClassInfoIsEnumLater };");
+   EXPECT_TRUE(gInterpreter->ClassInfo_IsEnum("ClassInfoIsEnumLater"));
+}
+
+#if defined(__SANITIZE_ADDRESS__)
+#define TCLINGTESTS_ASAN
+#elif defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define TCLINGTESTS_ASAN
+#endif
+#endif
+
+// https://github.com/root-project/root/issues/10454
+TEST_F(TClingTests, ClassInfoIsEnumMemory)
+{
+#ifdef TCLINGTESTS_ASAN
+   GTEST_SKIP() << "AddressSanitizer keeps freed memory resident";
+#endif
+   auto residentKB = [] {
+      ProcInfo_t info;
+      gSystem->GetProcInfo(&info);
+      return info.fMemResident;
+   };
+   gInterpreter->ClassInfo_IsEnum("std::vector<int>");
+   const auto before = residentKB();
+   for (int i = 0; i < 100000; ++i)
+      gInterpreter->ClassInfo_IsEnum("std::vector<int>");
+   EXPECT_LT(residentKB() - before, 5 * 1024);
+}

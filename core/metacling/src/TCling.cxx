@@ -8532,7 +8532,17 @@ bool TCling::ClassInfo_IsBase(ClassInfo_t* cinfo, const char* name) const
 
 bool TCling::ClassInfo_IsEnum(const char* name) const
 {
-   return TClingClassInfo::IsEnum(GetInterpreterImpl(), name);
+   R__LOCKGUARD(gInterpreterMutex);
+   // Looking up a name that needs parsing allocates in the AST on every call.
+   // Remember the answers until a transaction changes the AST.
+   if (fIsEnumCacheMarker != fTransactionCount) {
+      fIsEnumCache.clear();
+      fIsEnumCacheMarker = fTransactionCount;
+   }
+   auto [entry, isNew] = fIsEnumCache.try_emplace(name, false);
+   if (isNew)
+      entry->second = TClingClassInfo::IsEnum(GetInterpreterImpl(), name);
+   return entry->second;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
